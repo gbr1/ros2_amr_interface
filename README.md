@@ -10,7 +10,7 @@ Lightweight package to get AMRs working with ROS2.
 
 ## Run teleop
 
-`ros2 launch teleop_twist_joy teleop-launch.py config_filepath:=/home/gbr1/dev_ws/src/ros2_amr_interface/config/joy.config.yaml`
+`ros2 launch teleop_twist_joy teleop-launch.py config_filepath:=~/dev_ws/src/ros2_amr_interface/config/joy.config.yaml`
 
 ## How install
 
