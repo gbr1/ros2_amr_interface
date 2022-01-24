@@ -20,6 +20,7 @@ Lightweight package to get AMRs working with ROS2.
 - [ROS2](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html)
 - [colcon](https://docs.ros.org/en/foxy/Tutorials/Colcon-Tutorial.html)
 - [workspace](https://docs.ros.org/en/foxy/Tutorials/Workspace/Creating-A-Workspace.html)
+- [permissions on dialout](https://github.com/gbr1/TIL/blob/main/Linux/22-01-24_How_add_user_to_dialout_group.md)
 
 ### Install AMR interface package
 
