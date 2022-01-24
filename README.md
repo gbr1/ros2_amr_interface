@@ -14,6 +14,15 @@ Lightweight package to get AMRs working with ROS2.
 
 ## How install
 
+
+### Prerequisites
+
+- [ROS2](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html)
+- [colcon](https://docs.ros.org/en/foxy/Tutorials/Colcon-Tutorial.html)
+- [workspace](https://docs.ros.org/en/foxy/Tutorials/Workspace/Creating-A-Workspace.html)
+
+### Install AMR interface package
+
 You require to install dependencies, since binaries sometimes are not updated install transport_drivers from source:
 ``` bash
 cd ~/dev_ws/src
