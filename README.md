@@ -37,8 +37,6 @@ then install amr package by:
 ``` bash
 cd ~/dev_ws/src
 git clone https://github.com/gbr1/ros2_amr_interface.git
-git submodule init
-git submodule update
 cd ..
 rosdep install --from-paths src --ignore-src -r -y
 colcon build
