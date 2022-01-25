@@ -102,24 +102,24 @@ class AMR_Node: public rclcpp::Node{
         std::cout<<std::endl;
         
         while (packeter.checkPayload()){
-          uint8_t c;
-          float w1,w2,w3,w4;
-          packeter.unpacketC4F(c,w1,w2,w3,w4);
-          rclcpp::Time now = this->get_clock()->now();
-          RCLCPP_INFO(this->get_logger(),"joints: %f\t%f\t%f\t%f",w1,w2,w3,w4);
-          mecanum.inverse(w1,w2,w3,w4,vx,vy,w);
-          //RCLCPP_INFO(this->get_logger(),"odom: %f\t%f\t%f",vx,vy,w);
-          dt=now.seconds()-previous_time.seconds();
-          previous_time=now;
-          
-          float dtheta=w*dt;
-          float dx=(vx*cos(theta)-vy*sin(theta))*dt;
-          float dy=(vx*sin(theta)+vy*cos(theta))*dt;
-          x+=dx;
-          y+=dy;
-          theta+=dtheta;
-          
-          to_be_publish=true;
+          uint8_t c=packeter.payloadTop();
+          if (c=='j'){
+            float w1,w2,w3,w4;
+            packeter.unpacketC4F(c,w1,w2,w3,w4);
+            rclcpp::Time now = this->get_clock()->now();
+            RCLCPP_INFO(this->get_logger(),"joints: %f\t%f\t%f\t%f",c,w1,w2,w3,w4);
+            mecanum.inverse(w1,w2,w3,w4,vx,vy,w);
+            //RCLCPP_INFO(this->get_logger(),"odom: %f\t%f\t%f",vx,vy,w);
+            dt=now.seconds()-previous_time.seconds();
+            previous_time=now;
+            
+            float dtheta=w*dt;
+            float dx=(vx*cos(theta)-vy*sin(theta))*dt;
+            float dy=(vx*sin(theta)+vy*cos(theta))*dt;
+            x+=dx;
+            y+=dy;
+            theta+=dtheta;
+          }
         }
       }
 
