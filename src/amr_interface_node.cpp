@@ -33,6 +33,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2_ros/transform_broadcaster.h"
+#include "tf2/LinearMath/Matrix3x3.h"
 
 #include "ros2_amr_interface/FIKmodel.hpp"
 #include "ucPack/ucPack.h"
@@ -57,9 +58,7 @@ class AMR_Node: public rclcpp::Node{
 
       
       rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr joy_subscription;
-
-
-
+      rclcpp::Subscription<geometry_msgs::msg::PoseWithCovariance>::SharedPtr initial_pose_subscription;
 
 
 
@@ -74,6 +73,19 @@ class AMR_Node: public rclcpp::Node{
         serial_driver->port()->async_send(serial_msg);
         serial_msg.clear();
         RCLCPP_INFO(this->get_logger(),"sent: %f\t%f\t%f\t%f",w1,w2,w3,w4);
+      }
+
+      void initial_pose_callback(const geometry_msgs::msg::PoseWithCovariance::SharedPtr msg) {
+        x=msg->pose.position.x;
+        y=msg->pose.position.y;
+
+        tf2::Quaternion q(msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z, msg->pose.orientation.w);
+        tf2::Matrix3x3 m(q);
+        double roll,pitch,yaw;
+        m.getRPY(roll,pitch,yaw);
+        theta=float(y);
+      
+        RCLCPP_INFO(this->get_logger(), "new pose:\t\t%f %f %f\t%f %f %f", x, y, 0.0, 0.0, 0.0, theta);
       }
 
 
@@ -147,6 +159,7 @@ class AMR_Node: public rclcpp::Node{
       tf_bc = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
       joy_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/cmd_vel",1,std::bind(&AMR_Node::joy_callback, this, std::placeholders::_1));
+      initial_pose_subscription = this->create_subscription<geometry_msgs::msg::PoseWithCovariance>("/amr/initial_pose",1,std::bind(&AMR_Node::initial_pose_callback, this, std::placeholders::_1));
     }
 
     ~AMR_Node(){
