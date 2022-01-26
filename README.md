@@ -55,7 +55,7 @@ source install/setup.bash
 - [x] add cmd_vel
 - [ ] add Lifecycle
 - [ ] add imu
-- [ ] add odom reset
+- [x] add odom reset/init pos
 - [ ] add battery
 - [ ] refactor code in files
 - [ ] add parameters (device name, robot dimensions, etc)

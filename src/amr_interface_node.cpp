@@ -36,6 +36,7 @@
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2/LinearMath/Matrix3x3.h"
+#include "sensor_msgs/msg/imu.hpp"
 
 #include "ros2_amr_interface/FIKmodel.hpp"
 #include "ucPack/ucPack.h"
@@ -59,11 +60,14 @@ class AMR_Node: public rclcpp::Node{
       rclcpp::Time previous_time;
 
       rclcpp::TimerBase::SharedPtr odom_timer;
+      rclcpp::TimerBase::SharedPtr imu_timer;
       
       rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr joy_subscription;
       rclcpp::Subscription<geometry_msgs::msg::PoseWithCovariance>::SharedPtr initial_pose_subscription;
       rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
+      rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher;
 
+      bool imu_data_available;
 
 
       void joy_callback(const geometry_msgs::msg::Twist::SharedPtr msg) const {
@@ -120,6 +124,13 @@ class AMR_Node: public rclcpp::Node{
             y+=dy;
             theta+=dtheta;
           }
+
+          if (c=='i'){
+            float temp, f;
+            packeter.unpacketC8F(c,ax,ay,az,gx,gy,gz,temp,f);
+            RCLCPP_INFO(this->get_logger(),"imu: %f\t%f\t%f\t%f\t%f\t%f\t%f",ax,ay,az,gx,gy,gz,temp);
+            imu_data_available=true;
+          }
         }
       }
 
@@ -170,12 +181,32 @@ class AMR_Node: public rclcpp::Node{
         w=0.0;
       }
 
+      void imu_pub_callback(){
+        if (imu_data_available){
+          rclcpp::Time now = this->get_clock()->now();
+          sensor_msgs::msg::Imu imu;
+          imu.header.stamp=now;
+          imu.header.frame_id="imu_link";
+          imu.linear_acceleration.x=ax;
+          imu.linear_acceleration.y=ay;
+          imu.linear_acceleration.z=az;
+          tf2::Quaternion q;
+          q.setRPY(gx,gy,gz);
+          imu.orientation.x=q.x();
+          imu.orientation.y=q.y();
+          imu.orientation.z=q.z();
+          imu.orientation.w=q.w();
+          imu_publisher->publish(imu);
+          imu_data_available = false;
+        }
+      }
+
 
 
 
 
   public:
-    float vx, vy, w, x, y, theta;
+    float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
     double dt;
     bool to_be_publish;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_bc;
@@ -191,6 +222,7 @@ class AMR_Node: public rclcpp::Node{
       theta=0;
       dt=0;
       to_be_publish=false;
+      imu_data_available=false;
 
       try{
         
@@ -211,8 +243,13 @@ class AMR_Node: public rclcpp::Node{
 
       joy_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/cmd_vel",1,std::bind(&AMR_Node::joy_callback, this, std::placeholders::_1));
       initial_pose_subscription = this->create_subscription<geometry_msgs::msg::PoseWithCovariance>("/amr/initial_pose",1,std::bind(&AMR_Node::initial_pose_callback, this, std::placeholders::_1));
+      
       odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/wheel/odometry",1);
       odom_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::odom_pub_callback, this));
+
+      imu_publisher = this->create_publisher<sensor_msgs::msg::Imu>("/amr/imu/raw",1);
+      imu_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::imu_pub_callback, this));
+
 
     }
 
