@@ -44,7 +44,8 @@
 using namespace std::chrono_literals;
 
 
-std::string port_name="/dev/ttyACM0";//USB0";
+//std::string port_name="/dev/ttyACM0";
+std::string port_name="/dev/ttyUSB0";
 
 FIKmodel mecanum(0.0825,0.105,0.04); //lx=0.0825m, ly=0.105m , r= 0.04m
 ucPack packeter(100);
@@ -190,12 +191,19 @@ class AMR_Node: public rclcpp::Node{
           imu.linear_acceleration.x=ax;
           imu.linear_acceleration.y=ay;
           imu.linear_acceleration.z=az;
+          /*
           tf2::Quaternion q;
           q.setRPY(gx,gy,gz);
           imu.orientation.x=q.x();
           imu.orientation.y=q.y();
           imu.orientation.z=q.z();
           imu.orientation.w=q.w();
+          */
+          imu.orientation_covariance[0]=-1;
+          imu.angular_velocity.x=gx;
+          imu.angular_velocity.y=gy;
+          imu.angular_velocity.z=gz;
+          
           imu_publisher->publish(imu);
           imu_data_available = false;
         }
