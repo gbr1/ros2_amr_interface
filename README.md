@@ -53,15 +53,15 @@ source install/setup.bash
 - [x] add odom
 - [x] add tf
 - [x] add cmd_vel
-- [ ] add Lifecycle
-- [ ] add imu
-- [ ] add odom reset
+- [x] add odom reset/init pos
+- [x] add imu
 - [ ] add battery
-- [ ] refactor code in files
 - [ ] add parameters (device name, robot dimensions, etc)
-- [ ] add launch files
 - [ ] tf broadcaster should be disabled to not cause issues with localization 
+- [ ] refactor code in files
+- [ ] add launch files
 - [ ] create a namespace for topics (e.g. /amr/cmd_vel)
+- [ ] add Lifecycle
 - [ ] add diff drive mode
 
 
