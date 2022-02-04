@@ -8,6 +8,10 @@ Lightweight package to get AMRs working with ROS2.
 
 `ros2 run ros2_amr_interface amr_interface_node`
 
+if you need to change serial port:
+`ros2 run ros2_amr_interface amr_interface_node --ros-args -p port_name:=<your port>`
+
+
 ## Run teleop
 
 `ros2 launch teleop_twist_joy teleop-launch.py config_filepath:=~/dev_ws/src/ros2_amr_interface/config/joy.config.yaml`
