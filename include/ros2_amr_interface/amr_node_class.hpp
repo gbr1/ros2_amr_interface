@@ -40,6 +40,7 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "sensor_msgs/msg/imu.hpp"
+#include "sensor_msgs/msg/battery_state.hpp"
 #include "rcl_interfaces/msg/set_parameters_result.hpp"
 
 #include "ros2_amr_interface/FIKmodel.hpp"
@@ -58,12 +59,13 @@ class AMR_Node: public rclcpp::Node{
     private:
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
-
+        float battery;
         bool publishTF;
 
 
         bool to_be_publish;
         bool imu_data_available;
+        bool battery_data_available;
 
         // Required for serial communication
         std::unique_ptr<IoContext> node_ctx{};
@@ -75,6 +77,7 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::Time previous_time;
         rclcpp::TimerBase::SharedPtr odom_timer;
         rclcpp::TimerBase::SharedPtr imu_timer;
+        rclcpp::TimerBase::SharedPtr battery_timer;
         
         // Subscribers and Publishers
         rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr joy_subscription;
@@ -82,6 +85,7 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
         rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher;
         std::unique_ptr<tf2_ros::TransformBroadcaster> tf_bc;
+        rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_publisher;
 
         OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle;
 
@@ -156,6 +160,15 @@ class AMR_Node: public rclcpp::Node{
                     RCLCPP_INFO(this->get_logger(),"imu: %f\t%f\t%f\t%f\t%f\t%f\t%f",ax,ay,az,gx,gy,gz,temp);
                     //-----------------------------------------------------------------------------------------
                     imu_data_available=true;
+                }
+            
+                // battery message from hardware
+                if (c=='b'){
+                    packeter.unpacketC1F(c,battery);
+                    //-----------------------------------------------------------------------------------------
+                    RCLCPP_INFO(this->get_logger(),"battery: %f V",battery);
+                    //-----------------------------------------------------------------------------------------
+                    battery_data_available=true;
                 }
             }
         }
@@ -241,6 +254,19 @@ class AMR_Node: public rclcpp::Node{
             }
         }
 
+        // Battery publisher
+        void battery_pub_callback(){
+            if (battery_data_available){
+                rclcpp::Time now = this->get_clock()->now();
+                sensor_msgs::msg::BatteryState battery_msg;
+                battery_msg.header.stamp=now;
+                battery_msg.header.frame_id="base_link";
+                battery_msg.voltage=battery;
+                battery_publisher->publish(battery_msg);
+                battery_data_available=false;
+            }
+        }
+
         // This callback is used for dynamics parameters
         rcl_interfaces::msg::SetParametersResult parameters_callback(const std::vector<rclcpp::Parameter> &parameters){
             rcl_interfaces::msg::SetParametersResult result;
@@ -308,21 +334,22 @@ class AMR_Node: public rclcpp::Node{
     public:
 
         AMR_Node():Node("AMR_node"),node_ctx{new IoContext(2)},serial_driver{new drivers::serial_driver::SerialDriver(*node_ctx)}{
-            vx=0;
-            vy=0;
-            w=0;
-            x=0;
-            y=0;
-            theta=0;
-            dt=0;
+            vx=0.0;
+            vy=0.0;
+            w=0.0;
+            x=0.0;
+            y=0.0;
+            theta=0.0;
+            dt=0.0;
+            battery=0.0;
+
             to_be_publish=false;
             imu_data_available=false;
-
+            battery_data_available=false;
 
             // Parameters
             parameters_declaration();
             get_all_parameters();
-            //parameters_timer=this->create_wall_timer(1000ms, std::bind(&AMR_Node::parameters_callback, this, std::placeholders::_1));
             parameters_callback_handle = add_on_set_parameters_callback(std::bind(&AMR_Node::parameters_callback, this, std::placeholders::_1));
 
 
@@ -350,6 +377,9 @@ class AMR_Node: public rclcpp::Node{
 
             imu_publisher = this->create_publisher<sensor_msgs::msg::Imu>("/amr/imu/raw",1);
             imu_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::imu_pub_callback, this));
+
+            battery_publisher = this->create_publisher<sensor_msgs::msg::BatteryState>("/amr/battery",1);
+            battery_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::battery_pub_callback, this));
 
 
         }
