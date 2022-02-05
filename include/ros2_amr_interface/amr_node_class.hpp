@@ -57,6 +57,7 @@ ucPack packeter(100);
 
 class AMR_Node: public rclcpp::Node{
     private:
+        double imu_offset_acc_x, imu_offset_acc_y, imu_offset_acc_z, imu_offset_gyro_x, imu_offset_gyro_y, imu_offset_gyro_z;
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
         float battery;
@@ -233,9 +234,9 @@ class AMR_Node: public rclcpp::Node{
                 sensor_msgs::msg::Imu imu;
                 imu.header.stamp=now;
                 imu.header.frame_id="imu_link";
-                imu.linear_acceleration.x=ax;
-                imu.linear_acceleration.y=ay;
-                imu.linear_acceleration.z=az;
+                imu.linear_acceleration.x=ax+imu_offset_acc_x;
+                imu.linear_acceleration.y=ay+imu_offset_acc_y;
+                imu.linear_acceleration.z=az+imu_offset_acc_z;
                 /*
                 tf2::Quaternion q;
                 q.setRPY(gx,gy,gz);
@@ -245,9 +246,9 @@ class AMR_Node: public rclcpp::Node{
                 imu.orientation.w=q.w();
                 */
                 imu.orientation_covariance[0]=-1;
-                imu.angular_velocity.x=gx;
-                imu.angular_velocity.y=gy;
-                imu.angular_velocity.z=gz;
+                imu.angular_velocity.x=gx+imu_offset_gyro_x;
+                imu.angular_velocity.y=gy+imu_offset_gyro_y;
+                imu.angular_velocity.z=gz+imu_offset_gyro_z;
                 
                 imu_publisher->publish(imu);
                 imu_data_available = false;
@@ -295,11 +296,81 @@ class AMR_Node: public rclcpp::Node{
                         RCLCPP_WARN_STREAM(get_logger(),result.reason);
                         return result;
                     }
-                    double param_value = param.as_double();
+                    imu_offset_acc_x = param.as_double();
                     result.successful=true;
                     result.reason="Parameter "+param.get_name()+" setted correctly!";
                     return result;
                 } 
+
+                if (param.get_name() == "imu.offsets.accelerometer.y"){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_offset_acc_y = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (param.get_name() == "imu.offsets.accelerometer.z"){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_offset_acc_z = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (param.get_name() == "imu.offsets.gyro.x"){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_offset_gyro_x = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (param.get_name() == "imu.offsets.gyro.y"){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_offset_gyro_y = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (param.get_name() == "imu.offsets.gyro.z"){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_offset_gyro_z = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
             }
             return result;
         }
@@ -309,22 +380,32 @@ class AMR_Node: public rclcpp::Node{
         // Here are declared all parameters
         void parameters_declaration(){
             this->declare_parameter<std::string>("port_name","/dev/ttyUSB0");
+
+
             this->declare_parameter<bool>("publishTF",true);
 
-            this->declare_parameter<double>("imu_offsets_accelerometer_x",0.0);
-            this->declare_parameter<double>("imu_offsets_accelerometer_y",0.0);
-            this->declare_parameter<double>("imu_offsets_accelerometer_z",0.0);
-            this->declare_parameter<double>("imu_offsets_gyro_x",0.0);
-            this->declare_parameter<double>("imu_offsets_gyro_y",0.0);
-            this->declare_parameter<double>("imu_offsets_gyro_z",0.0);
-
+            this->declare_parameter<double>("imu.offsets.accelerometer.x",0.0);
+            this->declare_parameter<double>("imu.offsets.accelerometer.y",0.0);
+            this->declare_parameter<double>("imu.offsets.accelerometer.z",0.0);
+            this->declare_parameter<double>("imu.offsets.gyro.x",0.0);
+            this->declare_parameter<double>("imu.offsets.gyro.y",0.0);
+            this->declare_parameter<double>("imu.offsets.gyro.z",0.0);
 
         }
 
         //Load static parameters
         void get_all_parameters(){
             this->get_parameter("port_name",device_name);
+
             this->get_parameter("publishTF",publishTF);
+
+            this->get_parameter("imu.offsets.accelerometer.x",imu_offset_acc_x);
+            this->get_parameter("imu.offsets.accelerometer.y",imu_offset_acc_y);
+            this->get_parameter("imu.offsets.accelerometer.z",imu_offset_acc_z);
+            this->get_parameter("imu.offsets.gyro.x",imu_offset_gyro_x);
+            this->get_parameter("imu.offsets.gyro.y",imu_offset_gyro_y);
+            this->get_parameter("imu.offsets.gyro.z",imu_offset_gyro_z);
+
         }
 
 
