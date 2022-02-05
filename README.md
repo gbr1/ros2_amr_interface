@@ -61,7 +61,7 @@ source install/setup.bash
 - [x] add imu
 - [ ] add battery
 - [ ] add parameters (device name, robot dimensions, etc)
-- [ ] tf broadcaster should be disabled to not cause issues with localization 
+- [x] tf broadcaster should be disabled to not cause issues with localization 
 - [ ] refactor code in files
 - [ ] add launch files
 - [ ] create a namespace for topics (e.g. /amr/cmd_vel)

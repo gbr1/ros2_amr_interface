@@ -40,6 +40,7 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "sensor_msgs/msg/imu.hpp"
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
 
 #include "ros2_amr_interface/FIKmodel.hpp"
 #include "ucPack/ucPack.h"
@@ -57,6 +58,8 @@ class AMR_Node: public rclcpp::Node{
     private:
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
+
+        bool publishTF;
 
 
         bool to_be_publish;
@@ -79,6 +82,8 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
         rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher;
         std::unique_ptr<tf2_ros::TransformBroadcaster> tf_bc;
+
+        OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle;
 
 
 
@@ -127,7 +132,9 @@ class AMR_Node: public rclcpp::Node{
                     float w1,w2,w3,w4;
                     packeter.unpacketC4F(c,w1,w2,w3,w4);
                     rclcpp::Time now = this->get_clock()->now();
+                    //---------------------------------------------------------------------------
                     RCLCPP_INFO(this->get_logger(),"joints: %f\t%f\t%f\t%f",c,w1,w2,w3,w4);
+                    //---------------------------------------------------------------------------
                     mecanum.inverse(w1,w2,w3,w4,vx,vy,w);
                     //RCLCPP_INFO(this->get_logger(),"odom: %f\t%f\t%f",vx,vy,w);
                     dt=now.seconds()-previous_time.seconds();
@@ -145,7 +152,9 @@ class AMR_Node: public rclcpp::Node{
                 if (c=='i'){
                     float temp, f;
                     packeter.unpacketC8F(c,ax,ay,az,gx,gy,gz,temp,f);
+                    //-----------------------------------------------------------------------------------------
                     RCLCPP_INFO(this->get_logger(),"imu: %f\t%f\t%f\t%f\t%f\t%f\t%f",ax,ay,az,gx,gy,gz,temp);
+                    //-----------------------------------------------------------------------------------------
                     imu_data_available=true;
                 }
             }
@@ -154,24 +163,29 @@ class AMR_Node: public rclcpp::Node{
         // Odometry publisher and TF broadcaster
         void odom_pub_callback(){
             rclcpp::Time now = this->get_clock()->now();
-            geometry_msgs::msg::TransformStamped t;
-
-            t.header.stamp = now;
-            t.header.frame_id = "odom";
-            t.child_frame_id = "base_link";
-
-            t.transform.translation.x = this->x;
-            t.transform.translation.y = this->y;
-            t.transform.translation.z = 0.0;
-
             tf2::Quaternion q;
             q.setRPY(0.0,0.0,this->theta);
-            t.transform.rotation.x = q.x();
-            t.transform.rotation.y = q.y();
-            t.transform.rotation.z = q.z();
-            t.transform.rotation.w = q.w();
 
-            this->tf_bc->sendTransform(t);
+            if (publishTF){
+                geometry_msgs::msg::TransformStamped t;
+
+                t.header.stamp = now;
+                t.header.frame_id = "odom";
+                t.child_frame_id = "base_link";
+
+                t.transform.translation.x = this->x;
+                t.transform.translation.y = this->y;
+                t.transform.translation.z = 0.0;
+
+                
+                t.transform.rotation.x = q.x();
+                t.transform.rotation.y = q.y();
+                t.transform.rotation.z = q.z();
+                t.transform.rotation.w = q.w();
+
+                this->tf_bc->sendTransform(t);
+            }
+            
 
             nav_msgs::msg::Odometry odom;
             odom.header.stamp=now;
@@ -227,11 +241,26 @@ class AMR_Node: public rclcpp::Node{
             }
         }
 
-
-        rcl_interfaces::msg::SetParametersResult parameters_callback(std::vector<rclcpp::Parameter> parameters){
+        // This callback is used for dynamics parameters
+        rcl_interfaces::msg::SetParametersResult parameters_callback(const std::vector<rclcpp::Parameter> &parameters){
             rcl_interfaces::msg::SetParametersResult result;
             result.successful = false;
             for (const auto & param : parameters){
+
+                if (param.get_name() == "publishTF"){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_BOOL;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    publishTF = param.as_bool();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
                 if (param.get_name() == "imu.offsets.accelerometer.x"){
                     rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
                     if (param.get_type() != correctType){
@@ -241,13 +270,35 @@ class AMR_Node: public rclcpp::Node{
                         return result;
                     }
                     double param_value = param.as_double();
-                    RCLCPP_INFO(get_logger(), "parametro -> %d",param_value);
                     result.successful=true;
                     result.reason="Parameter "+param.get_name()+" setted correctly!";
                     return result;
-                }
-                
+                } 
             }
+            return result;
+        }
+        
+
+
+        // Here are declared all parameters
+        void parameters_declaration(){
+            this->declare_parameter<std::string>("port_name","/dev/ttyUSB0");
+            this->declare_parameter<bool>("publishTF",true);
+
+            this->declare_parameter<double>("imu_offsets_accelerometer_x",0.0);
+            this->declare_parameter<double>("imu_offsets_accelerometer_y",0.0);
+            this->declare_parameter<double>("imu_offsets_accelerometer_z",0.0);
+            this->declare_parameter<double>("imu_offsets_gyro_x",0.0);
+            this->declare_parameter<double>("imu_offsets_gyro_y",0.0);
+            this->declare_parameter<double>("imu_offsets_gyro_z",0.0);
+
+
+        }
+
+        //Load static parameters
+        void get_all_parameters(){
+            this->get_parameter("port_name",device_name);
+            this->get_parameter("publishTF",publishTF);
         }
 
 
@@ -269,10 +320,11 @@ class AMR_Node: public rclcpp::Node{
 
 
             // Parameters
-            this->declare_parameter<std::string>("port_name","/dev/ttyUSB0");
-            this->get_parameter("port_name",device_name);
+            parameters_declaration();
+            get_all_parameters();
+            //parameters_timer=this->create_wall_timer(1000ms, std::bind(&AMR_Node::parameters_callback, this, std::placeholders::_1));
+            parameters_callback_handle = add_on_set_parameters_callback(std::bind(&AMR_Node::parameters_callback, this, std::placeholders::_1));
 
-            
 
             try{
                 drivers::serial_driver::SerialPortConfig serial_config(115200,drivers::serial_driver::FlowControl::NONE,drivers::serial_driver::Parity::NONE,drivers::serial_driver::StopBits::ONE);
