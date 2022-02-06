@@ -59,7 +59,7 @@ source install/setup.bash
 - [x] add cmd_vel
 - [x] add odom reset/init pos
 - [x] add imu
-- [ ] add battery
+- [x] add battery
 - [ ] add parameters (device name, robot dimensions, etc)
 - [x] tf broadcaster should be disabled to not cause issues with localization 
 - [ ] refactor code in files
