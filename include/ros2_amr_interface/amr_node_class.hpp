@@ -493,6 +493,15 @@ class AMR_Node: public rclcpp::Node{
         }
 
         ~AMR_Node(){
+            std::vector<uint8_t> serial_msg;
+            uint8_t dim=packeter.packetC1F('S',0.0);
+            for(uint8_t i=0; i<dim; i++){
+                serial_msg.push_back(packeter.msg[i]);
+            }
+            serial_driver->port()->async_send(serial_msg);
+            serial_msg.clear();
+
+
             if (node_ctx){
                 node_ctx->waitForExit();
             }
