@@ -53,6 +53,7 @@ using namespace std::chrono_literals;
 class AMR_Node: public rclcpp::Node{
     private:
         FIKmodel mecanum;
+        float model_lx, model_ly, model_wheel;
         ucPack packeter;
         double imu_offset_acc_x, imu_offset_acc_y, imu_offset_acc_z, imu_offset_gyro_x, imu_offset_gyro_y, imu_offset_gyro_z;
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
@@ -419,6 +420,9 @@ class AMR_Node: public rclcpp::Node{
             this->declare_parameter<double>("imu.offsets.gyro.y",0.0);
             this->declare_parameter<double>("imu.offsets.gyro.z",0.0);
 
+            this->declare_parameter<float>("model.size.chassis.x",0.0825);
+            this->declare_parameter<float>("model.size.chassis.y",0.105);
+            this->declare_parameter<float>("model.size.wheel.radius",0.04);
         }
 
         //Load static parameters
@@ -434,6 +438,11 @@ class AMR_Node: public rclcpp::Node{
             this->get_parameter("imu.offsets.gyro.x",imu_offset_gyro_x);
             this->get_parameter("imu.offsets.gyro.y",imu_offset_gyro_y);
             this->get_parameter("imu.offsets.gyro.z",imu_offset_gyro_z);
+
+
+            this->get_parameter("model.size.chassis.x",model_lx);
+            this->get_parameter("model.size.chassis.y",model_ly);
+            this->get_parameter("model.size.wheel.radius",model_wheel);          
 
         }
 
@@ -467,7 +476,7 @@ class AMR_Node: public rclcpp::Node{
             get_all_parameters();
             parameters_callback_handle = add_on_set_parameters_callback(std::bind(&AMR_Node::parameters_callback, this, std::placeholders::_1));
 
-            mecanum.setDimensions(0.0825,0.105,0.04);
+            mecanum.setDimensions(model_lx, model_ly, model_wheel);
 
 
             try{
