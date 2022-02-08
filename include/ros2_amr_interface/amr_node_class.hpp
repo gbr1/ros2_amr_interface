@@ -49,19 +49,18 @@
 using namespace std::chrono_literals;
 
 
-//std::string port_name="/dev/ttyACM0";
-std::string port_name="/dev/ttyUSB0";
-
-FIKmodel mecanum(0.0825,0.105,0.04); //lx=0.0825m, ly=0.105m , r= 0.04m
-ucPack packeter(100);
 
 class AMR_Node: public rclcpp::Node{
     private:
+        FIKmodel mecanum;
+        ucPack packeter;
         double imu_offset_acc_x, imu_offset_acc_y, imu_offset_acc_z, imu_offset_gyro_x, imu_offset_gyro_y, imu_offset_gyro_z;
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
         float battery;
         bool publishTF;
+        float timeout_connection;
+        bool connected;
 
 
         bool to_be_publish;
@@ -79,6 +78,7 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::TimerBase::SharedPtr odom_timer;
         rclcpp::TimerBase::SharedPtr imu_timer;
         rclcpp::TimerBase::SharedPtr battery_timer;
+        rclcpp::TimerBase::SharedPtr connection_timer;
         
         // Subscribers and Publishers
         rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr joy_subscription;
@@ -93,7 +93,7 @@ class AMR_Node: public rclcpp::Node{
 
 
         // Callback for /joy topic subscription
-        void joy_callback(const geometry_msgs::msg::Twist::SharedPtr msg) const {
+        void joy_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
             std::vector<uint8_t> serial_msg;
             float w1,w2,w3,w4;
             mecanum.forward(msg->linear.x,msg->linear.y,msg->angular.z,w1,w2,w3,w4);
@@ -120,7 +120,6 @@ class AMR_Node: public rclcpp::Node{
             RCLCPP_INFO(this->get_logger(), "new pose:\t\t%f %f %f\t%f %f %f", x, y, 0.0, 0.0, 0.0, theta);
         }
 
-
         // Callback for serial communication
         void serial_callback(const std::vector<uint8_t> & buffer, const size_t & bytes_transferred){
             for (int i=0; i<int(bytes_transferred); i++){
@@ -132,45 +131,54 @@ class AMR_Node: public rclcpp::Node{
             while (packeter.checkPayload()){
                 uint8_t c=packeter.payloadTop();
 
-                // joints message from hardware
-                if (c=='j'){
-                    float w1,w2,w3,w4;
-                    packeter.unpacketC4F(c,w1,w2,w3,w4);
-                    rclcpp::Time now = this->get_clock()->now();
-                    //---------------------------------------------------------------------------
-                    RCLCPP_INFO(this->get_logger(),"joints: %f\t%f\t%f\t%f",c,w1,w2,w3,w4);
-                    //---------------------------------------------------------------------------
-                    mecanum.inverse(w1,w2,w3,w4,vx,vy,w);
-                    //RCLCPP_INFO(this->get_logger(),"odom: %f\t%f\t%f",vx,vy,w);
-                    dt=now.seconds()-previous_time.seconds();
-                    previous_time=now;
+                if (!connected){
+                    if (c=='e'){
+                        connection_timer->cancel();
+                        connected=true;
+                    }
+                }
+                else{
+                    if (c=='j'){
+                        float w1,w2,w3,w4;
+                        packeter.unpacketC4F(c,w1,w2,w3,w4);
+                        rclcpp::Time now = this->get_clock()->now();
+                        //---------------------------------------------------------------------------
+                        RCLCPP_INFO(this->get_logger(),"joints: %f\t%f\t%f\t%f",c,w1,w2,w3,w4);
+                        //---------------------------------------------------------------------------
+                        mecanum.inverse(w1,w2,w3,w4,vx,vy,w);
+                        //RCLCPP_INFO(this->get_logger(),"odom: %f\t%f\t%f",vx,vy,w);
+                        dt=now.seconds()-previous_time.seconds();
+                        previous_time=now;
+                        
+                        float dtheta=w*dt;
+                        float dx=(vx*cos(theta)-vy*sin(theta))*dt;
+                        float dy=(vx*sin(theta)+vy*cos(theta))*dt;
+                        x+=dx;
+                        y+=dy;
+                        theta+=dtheta;
+                    }
                     
-                    float dtheta=w*dt;
-                    float dx=(vx*cos(theta)-vy*sin(theta))*dt;
-                    float dy=(vx*sin(theta)+vy*cos(theta))*dt;
-                    x+=dx;
-                    y+=dy;
-                    theta+=dtheta;
-                }
+                    // imu message from hardware
+                    if (c=='i'){
+                        float temp, f;
+                        packeter.unpacketC8F(c,ax,ay,az,gx,gy,gz,temp,f);
+                        //-----------------------------------------------------------------------------------------
+                        RCLCPP_INFO(this->get_logger(),"imu: %f\t%f\t%f\t%f\t%f\t%f\t%f",ax,ay,az,gx,gy,gz,temp);
+                        //-----------------------------------------------------------------------------------------
+                        imu_data_available=true;
+                    }
                 
-                // imu message from hardware
-                if (c=='i'){
-                    float temp, f;
-                    packeter.unpacketC8F(c,ax,ay,az,gx,gy,gz,temp,f);
-                    //-----------------------------------------------------------------------------------------
-                    RCLCPP_INFO(this->get_logger(),"imu: %f\t%f\t%f\t%f\t%f\t%f\t%f",ax,ay,az,gx,gy,gz,temp);
-                    //-----------------------------------------------------------------------------------------
-                    imu_data_available=true;
+                    // battery message from hardware
+                    if (c=='b'){
+                        packeter.unpacketC1F(c,battery);
+                        //-----------------------------------------------------------------------------------------
+                        RCLCPP_INFO(this->get_logger(),"battery: %f V",battery);
+                        //-----------------------------------------------------------------------------------------
+                        battery_data_available=true;
+                    }
                 }
-            
-                // battery message from hardware
-                if (c=='b'){
-                    packeter.unpacketC1F(c,battery);
-                    //-----------------------------------------------------------------------------------------
-                    RCLCPP_INFO(this->get_logger(),"battery: %f V",battery);
-                    //-----------------------------------------------------------------------------------------
-                    battery_data_available=true;
-                }
+                // joints message from hardware
+
             }
         }
 
@@ -380,7 +388,7 @@ class AMR_Node: public rclcpp::Node{
         // Here are declared all parameters
         void parameters_declaration(){
             this->declare_parameter<std::string>("port_name","/dev/ttyUSB0");
-
+            this->declare_parameter<float>("timeout_connection",60.0);
 
             this->declare_parameter<bool>("publishTF",true);
 
@@ -396,6 +404,7 @@ class AMR_Node: public rclcpp::Node{
         //Load static parameters
         void get_all_parameters(){
             this->get_parameter("port_name",device_name);
+            this->get_parameter("timeout_connection",timeout_connection);
 
             this->get_parameter("publishTF",publishTF);
 
@@ -409,12 +418,23 @@ class AMR_Node: public rclcpp::Node{
         }
 
 
+        void check_connection(){
+            std::vector<uint8_t> serial_msg;
+            uint8_t dim=packeter.packetC1F('E',timeout_connection);
+            for(uint8_t i=0; i<dim; i++){
+                serial_msg.push_back(packeter.msg[i]);
+            }
+            serial_driver->port()->async_send(serial_msg);
+            serial_msg.clear();
+        }
+
+
 
 
 
     public:
 
-        AMR_Node():Node("AMR_node"),node_ctx{new IoContext(2)},serial_driver{new drivers::serial_driver::SerialDriver(*node_ctx)}{
+        AMR_Node():Node("AMR_node"),node_ctx{new IoContext(2)},serial_driver{new drivers::serial_driver::SerialDriver(*node_ctx)},packeter(100){
             vx=0.0;
             vy=0.0;
             w=0.0;
@@ -427,11 +447,15 @@ class AMR_Node: public rclcpp::Node{
             to_be_publish=false;
             imu_data_available=false;
             battery_data_available=false;
+            
+            connected = false;
 
             // Parameters
             parameters_declaration();
             get_all_parameters();
             parameters_callback_handle = add_on_set_parameters_callback(std::bind(&AMR_Node::parameters_callback, this, std::placeholders::_1));
+
+            mecanum.setDimensions(0.0825,0.105,0.04);
 
 
             try{
@@ -461,6 +485,9 @@ class AMR_Node: public rclcpp::Node{
 
             battery_publisher = this->create_publisher<sensor_msgs::msg::BatteryState>("/amr/battery",1);
             battery_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::battery_pub_callback, this));
+
+
+            connection_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::check_connection, this));
 
 
         }
