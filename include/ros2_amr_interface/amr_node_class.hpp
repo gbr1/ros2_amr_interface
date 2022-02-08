@@ -79,6 +79,7 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::TimerBase::SharedPtr imu_timer;
         rclcpp::TimerBase::SharedPtr battery_timer;
         rclcpp::TimerBase::SharedPtr connection_timer;
+        rclcpp::Time timeout_time;
         
         // Subscribers and Publishers
         rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr joy_subscription;
@@ -124,16 +125,17 @@ class AMR_Node: public rclcpp::Node{
         void serial_callback(const std::vector<uint8_t> & buffer, const size_t & bytes_transferred){
             for (int i=0; i<int(bytes_transferred); i++){
                 packeter.buffer.push(buffer[i]);
-                //std::cout<<std::hex<<int(buffer[i])<<std::dec<<" ";
             }
             std::cout<<std::endl;
             
             while (packeter.checkPayload()){
                 uint8_t c=packeter.payloadTop();
-
+                timeout_time=this->get_clock()->now();
                 if (!connected){
                     if (c=='e'){
-                        connection_timer->cancel();
+                        if (timeout_connection<=0.0){
+                            connection_timer->cancel();
+                        }
                         connected=true;
                     }
                 }
@@ -383,7 +385,25 @@ class AMR_Node: public rclcpp::Node{
             return result;
         }
         
+        void check_connection(){
+            if (!connected){
+                std::vector<uint8_t> serial_msg;
+                uint8_t dim=packeter.packetC1F('E',timeout_connection);
+                for(uint8_t i=0; i<dim; i++){
+                    serial_msg.push_back(packeter.msg[i]);
+                }
+                serial_driver->port()->async_send(serial_msg);
+                serial_msg.clear();
+            }
+            else{
+                if ((this->get_clock()->now().seconds()-timeout_time.seconds())>timeout_connection){
+                    RCLCPP_WARN(this->get_logger(),"serial connection is timed out, no message in about %f seconds despite %f setted", this->get_clock()->now().seconds()-timeout_time.seconds(),timeout_connection);
+                    RCLCPP_WARN(this->get_logger(),"Trying to restart the board");
+                    connected=false;
+                }
+            }
 
+        }
 
         // Here are declared all parameters
         void parameters_declaration(){
@@ -418,15 +438,7 @@ class AMR_Node: public rclcpp::Node{
         }
 
 
-        void check_connection(){
-            std::vector<uint8_t> serial_msg;
-            uint8_t dim=packeter.packetC1F('E',timeout_connection);
-            for(uint8_t i=0; i<dim; i++){
-                serial_msg.push_back(packeter.msg[i]);
-            }
-            serial_driver->port()->async_send(serial_msg);
-            serial_msg.clear();
-        }
+
 
 
 
@@ -471,6 +483,8 @@ class AMR_Node: public rclcpp::Node{
             }catch(const std::exception & e){
                 RCLCPP_ERROR(get_logger(),"Error on creating serial port: %s",e.what());
             }
+
+            timeout_time=this->get_clock()->now();
 
             tf_bc = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
