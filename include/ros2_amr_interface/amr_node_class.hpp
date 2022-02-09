@@ -595,10 +595,10 @@ class AMR_Node: public rclcpp::Node{
             //ROS2 stuffs
             tf_bc = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
-            joy_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/cmd_vel",1,std::bind(&AMR_Node::joy_callback, this, std::placeholders::_1));
+            joy_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/amr/cmd_vel",1,std::bind(&AMR_Node::joy_callback, this, std::placeholders::_1));
             initial_pose_subscription = this->create_subscription<geometry_msgs::msg::PoseWithCovariance>("/amr/initial_pose",1,std::bind(&AMR_Node::initial_pose_callback, this, std::placeholders::_1));
             
-            odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/wheel/odometry",1);
+            odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/amr/odometry",1);
             odom_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::odom_pub_callback, this));
 
             imu_publisher = this->create_publisher<sensor_msgs::msg::Imu>("/amr/imu/raw",1);
