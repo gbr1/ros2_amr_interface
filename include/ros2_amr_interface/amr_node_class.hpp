@@ -49,24 +49,29 @@
 using namespace std::chrono_literals;
 
 
-//std::string port_name="/dev/ttyACM0";
-std::string port_name="/dev/ttyUSB0";
-
-FIKmodel mecanum(0.0825,0.105,0.04); //lx=0.0825m, ly=0.105m , r= 0.04m
-ucPack packeter(100);
 
 class AMR_Node: public rclcpp::Node{
     private:
-        double imu_offset_acc_x, imu_offset_acc_y, imu_offset_acc_z, imu_offset_gyro_x, imu_offset_gyro_y, imu_offset_gyro_z;
+        FIKmodel mecanum;
+        float model_lx, model_ly, model_wheel;
+        ucPack packeter;
+        double imu_offset_acc_x, imu_offset_acc_y, imu_offset_acc_z, imu_offset_gyro_x, imu_offset_gyro_y, imu_offset_gyro_z, acc_scale, gyro_scale;
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
         float battery;
         bool publishTF;
+        float timeout_connection;
+        bool connected;
+        bool try_reconnect;
 
 
         bool to_be_publish;
         bool imu_data_available;
         bool battery_data_available;
+
+        bool extra_verbose;
+
+        std::string imu_link, odom_link, robot_link;
 
         // Required for serial communication
         std::unique_ptr<IoContext> node_ctx{};
@@ -79,6 +84,8 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::TimerBase::SharedPtr odom_timer;
         rclcpp::TimerBase::SharedPtr imu_timer;
         rclcpp::TimerBase::SharedPtr battery_timer;
+        rclcpp::TimerBase::SharedPtr connection_timer;
+        rclcpp::Time timeout_time;
         
         // Subscribers and Publishers
         rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr joy_subscription;
@@ -90,10 +97,8 @@ class AMR_Node: public rclcpp::Node{
 
         OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle;
 
-
-
         // Callback for /joy topic subscription
-        void joy_callback(const geometry_msgs::msg::Twist::SharedPtr msg) const {
+        void joy_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
             std::vector<uint8_t> serial_msg;
             float w1,w2,w3,w4;
             mecanum.forward(msg->linear.x,msg->linear.y,msg->angular.z,w1,w2,w3,w4);
@@ -103,7 +108,11 @@ class AMR_Node: public rclcpp::Node{
             }
             serial_driver->port()->async_send(serial_msg);
             serial_msg.clear();
-            RCLCPP_INFO(this->get_logger(),"sent: %f\t%f\t%f\t%f",w1,w2,w3,w4);
+            //--------------------------------------------------------------------
+            if (extra_verbose){
+                RCLCPP_INFO(this->get_logger(),"sent: %f\t%f\t%f\t%f",w1,w2,w3,w4);
+            }
+            //--------------------------------------------------------------------
         }
 
         // Callback for /initial_pose topic subscription
@@ -116,61 +125,111 @@ class AMR_Node: public rclcpp::Node{
             double roll,pitch,yaw;
             m.getRPY(roll,pitch,yaw);
             theta=float(y);
-            
-            RCLCPP_INFO(this->get_logger(), "new pose:\t\t%f %f %f\t%f %f %f", x, y, 0.0, 0.0, 0.0, theta);
+            //---------------------------------------------------------------------------------------------
+            if (extra_verbose){
+                RCLCPP_INFO(this->get_logger(), "new pose:\t\t%f %f %f\t%f %f %f", x, y, 0.0, 0.0, 0.0, theta);
+            }
+            //---------------------------------------------------------------------------------------------
         }
-
 
         // Callback for serial communication
         void serial_callback(const std::vector<uint8_t> & buffer, const size_t & bytes_transferred){
             for (int i=0; i<int(bytes_transferred); i++){
                 packeter.buffer.push(buffer[i]);
-                //std::cout<<std::hex<<int(buffer[i])<<std::dec<<" ";
             }
-            std::cout<<std::endl;
             
             while (packeter.checkPayload()){
                 uint8_t c=packeter.payloadTop();
-
-                // joints message from hardware
-                if (c=='j'){
-                    float w1,w2,w3,w4;
-                    packeter.unpacketC4F(c,w1,w2,w3,w4);
-                    rclcpp::Time now = this->get_clock()->now();
-                    //---------------------------------------------------------------------------
-                    RCLCPP_INFO(this->get_logger(),"joints: %f\t%f\t%f\t%f",c,w1,w2,w3,w4);
-                    //---------------------------------------------------------------------------
-                    mecanum.inverse(w1,w2,w3,w4,vx,vy,w);
-                    //RCLCPP_INFO(this->get_logger(),"odom: %f\t%f\t%f",vx,vy,w);
-                    dt=now.seconds()-previous_time.seconds();
-                    previous_time=now;
+                timeout_time=this->get_clock()->now();
+                if (!connected){
+                    if (c=='e'){
+                        if (timeout_connection<=0.0){
+                            connection_timer->cancel();
+                        }
+                        connected=true;
+                        RCLCPP_INFO(this->get_logger(),"Hardware is now online");
+                        //Set imu scales
+                        setImuScales(acc_scale,gyro_scale);
+                    }
+                }
+                else{
+                    if (c=='j'){
+                        float w1,w2,w3,w4;
+                        packeter.unpacketC4F(c,w1,w2,w3,w4);
+                        rclcpp::Time now = this->get_clock()->now();
+                        //---------------------------------------------------------------------------
+                        if (extra_verbose){
+                            RCLCPP_INFO(this->get_logger(),"joints: %f\t%f\t%f\t%f",c,w1,w2,w3,w4);
+                        }
+                        //---------------------------------------------------------------------------
+                        mecanum.inverse(w1,w2,w3,w4,vx,vy,w);
+                        //RCLCPP_INFO(this->get_logger(),"odom: %f\t%f\t%f",vx,vy,w);
+                        dt=now.seconds()-previous_time.seconds();
+                        previous_time=now;
+                        
+                        float dtheta=w*dt;
+                        float dx=(vx*cos(theta)-vy*sin(theta))*dt;
+                        float dy=(vx*sin(theta)+vy*cos(theta))*dt;
+                        x+=dx;
+                        y+=dy;
+                        theta+=dtheta;
+                    }
                     
-                    float dtheta=w*dt;
-                    float dx=(vx*cos(theta)-vy*sin(theta))*dt;
-                    float dy=(vx*sin(theta)+vy*cos(theta))*dt;
-                    x+=dx;
-                    y+=dy;
-                    theta+=dtheta;
-                }
+                    // imu message from hardware
+                    if (c=='i'){
+                        float temp, f;
+                        packeter.unpacketC8F(c,ax,ay,az,gx,gy,gz,temp,f);
+                        //-----------------------------------------------------------------------------------------
+                        if (extra_verbose){
+                            RCLCPP_INFO(this->get_logger(),"imu: %f\t%f\t%f\t%f\t%f\t%f\t%f",ax,ay,az,gx,gy,gz,temp);
+                        }
+                        //-----------------------------------------------------------------------------------------
+                        imu_data_available=true;
+                    }
                 
-                // imu message from hardware
-                if (c=='i'){
-                    float temp, f;
-                    packeter.unpacketC8F(c,ax,ay,az,gx,gy,gz,temp,f);
-                    //-----------------------------------------------------------------------------------------
-                    RCLCPP_INFO(this->get_logger(),"imu: %f\t%f\t%f\t%f\t%f\t%f\t%f",ax,ay,az,gx,gy,gz,temp);
-                    //-----------------------------------------------------------------------------------------
-                    imu_data_available=true;
+                    // battery message from hardware
+                    if (c=='b'){
+                        packeter.unpacketC1F(c,battery);
+                        //-----------------------------------------------------------------------------------------
+                        if (extra_verbose){
+                            RCLCPP_INFO(this->get_logger(),"battery: %f V",battery);
+                        }
+
+                        //-----------------------------------------------------------------------------------------
+                        battery_data_available=true;
+                    }
+
+                    // battery message from hardware
+                    if (c=='s'){
+                        float f;
+                        packeter.unpacketC1F(c,f);
+                        //-----------------------------------------------------------------------------------------
+                        RCLCPP_WARN(this->get_logger(),"Hardware is stopped");
+                        //-----------------------------------------------------------------------------------------
+                        if (try_reconnect){
+                            connected=false;
+                            RCLCPP_WARN(this->get_logger(),"Try reconnecting to the hardware");
+                        }
+                        else{
+                            RCLCPP_WARN(this->get_logger(),"Closing the AMR interface, check your hardware");
+                            //this->AMR_Node::~AMR_Node();
+                            rclcpp::shutdown();
+                        }
+                    }
+
+                    if (c=='g'){
+                        float a,g;
+                        packeter.unpacketC2F(c,a,g);
+                        if (a<=0){
+                            RCLCPP_ERROR(this->get_logger(),"Wrong parameter on accelerometer scale: %f m/s^2", acc_scale);
+                        }
+                        if (g<=0){
+                            RCLCPP_ERROR(this->get_logger(),"Wrong parameter on gyro scale: %f rad/s", gyro_scale);
+                        }
+                    }
                 }
-            
-                // battery message from hardware
-                if (c=='b'){
-                    packeter.unpacketC1F(c,battery);
-                    //-----------------------------------------------------------------------------------------
-                    RCLCPP_INFO(this->get_logger(),"battery: %f V",battery);
-                    //-----------------------------------------------------------------------------------------
-                    battery_data_available=true;
-                }
+                // joints message from hardware
+
             }
         }
 
@@ -184,8 +243,8 @@ class AMR_Node: public rclcpp::Node{
                 geometry_msgs::msg::TransformStamped t;
 
                 t.header.stamp = now;
-                t.header.frame_id = "odom";
-                t.child_frame_id = "base_link";
+                t.header.frame_id = odom_link;
+                t.child_frame_id = robot_link;
 
                 t.transform.translation.x = this->x;
                 t.transform.translation.y = this->y;
@@ -203,8 +262,8 @@ class AMR_Node: public rclcpp::Node{
 
             nav_msgs::msg::Odometry odom;
             odom.header.stamp=now;
-            odom.header.frame_id="odom";
-            odom.child_frame_id="base_link";
+            odom.header.frame_id=odom_link;
+            odom.child_frame_id=robot_link;
             odom.pose.pose.position.x=this->x;
             odom.pose.pose.position.y=this->y;
             odom.pose.pose.position.z=0.0;
@@ -212,7 +271,7 @@ class AMR_Node: public rclcpp::Node{
             odom.pose.pose.orientation.y=q.y();
             odom.pose.pose.orientation.z=q.z();
             odom.pose.pose.orientation.w=q.w();
-            odom.child_frame_id="base_link";
+            odom.child_frame_id=robot_link;
             odom.twist.twist.linear.x = this->vx;
             odom.twist.twist.linear.y = this->vy;
             odom.twist.twist.linear.z = 0.0;
@@ -233,7 +292,7 @@ class AMR_Node: public rclcpp::Node{
                 rclcpp::Time now = this->get_clock()->now();
                 sensor_msgs::msg::Imu imu;
                 imu.header.stamp=now;
-                imu.header.frame_id="imu_link";
+                imu.header.frame_id=imu_link;
                 imu.linear_acceleration.x=ax+imu_offset_acc_x;
                 imu.linear_acceleration.y=ay+imu_offset_acc_y;
                 imu.linear_acceleration.z=az+imu_offset_acc_z;
@@ -273,6 +332,34 @@ class AMR_Node: public rclcpp::Node{
             rcl_interfaces::msg::SetParametersResult result;
             result.successful = false;
             for (const auto & param : parameters){
+
+                if (param.get_name() == "show_extra_verbose"){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_BOOL;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    extra_verbose = param.as_bool();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (param.get_name() == "try_reconnect"){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_BOOL;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    try_reconnect = param.as_bool();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
 
                 if (param.get_name() == "publishTF"){
                     rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_BOOL;
@@ -375,46 +462,94 @@ class AMR_Node: public rclcpp::Node{
             return result;
         }
         
+        void check_connection(){
+            if (!connected){
+                std::vector<uint8_t> serial_msg;
+                uint8_t dim=packeter.packetC1F('E',timeout_connection);
+                for(uint8_t i=0; i<dim; i++){
+                    serial_msg.push_back(packeter.msg[i]);
+                }
+                serial_driver->port()->async_send(serial_msg);
+                serial_msg.clear();
+            }
+            else{
+                if ((this->get_clock()->now().seconds()-timeout_time.seconds())>timeout_connection){
+                    RCLCPP_WARN(this->get_logger(),"serial connection is timed out, no message in about %f seconds despite %f setted", this->get_clock()->now().seconds()-timeout_time.seconds(),timeout_connection);
+                    RCLCPP_WARN(this->get_logger(),"Trying to restart the board");
+                    connected=false;
+                }
+            }
 
+        }
 
         // Here are declared all parameters
         void parameters_declaration(){
             this->declare_parameter<std::string>("port_name","/dev/ttyUSB0");
-
-
+            this->declare_parameter<float>("timeout_connection",60.0);
+            this->declare_parameter<bool>("try_reconnect",true);
             this->declare_parameter<bool>("publishTF",true);
 
+            this->declare_parameter<std::string>("imu.frame_id","imu_link");
             this->declare_parameter<double>("imu.offsets.accelerometer.x",0.0);
             this->declare_parameter<double>("imu.offsets.accelerometer.y",0.0);
             this->declare_parameter<double>("imu.offsets.accelerometer.z",0.0);
             this->declare_parameter<double>("imu.offsets.gyro.x",0.0);
             this->declare_parameter<double>("imu.offsets.gyro.y",0.0);
             this->declare_parameter<double>("imu.offsets.gyro.z",0.0);
+            this->declare_parameter<float>("imu.scale.accelerometer",2.0);
+            this->declare_parameter<float>("imu.scale.gyro",250.0);
 
+
+            this->declare_parameter<std::string>("odom.frame_id","odom");
+            this->declare_parameter<std::string>("frame_id","base_link");
+            this->declare_parameter<float>("model.size.chassis.x",0.0825);
+            this->declare_parameter<float>("model.size.chassis.y",0.105);
+            this->declare_parameter<float>("model.size.wheel.radius",0.04);
+
+            this->declare_parameter<bool>("show_extra_verbose", false);
         }
 
         //Load static parameters
         void get_all_parameters(){
             this->get_parameter("port_name",device_name);
-
+            this->get_parameter("timeout_connection",timeout_connection);
+            this->get_parameter("try_reconnect",try_reconnect);
             this->get_parameter("publishTF",publishTF);
 
+            this->get_parameter("imu.frame_id",imu_link);
             this->get_parameter("imu.offsets.accelerometer.x",imu_offset_acc_x);
             this->get_parameter("imu.offsets.accelerometer.y",imu_offset_acc_y);
             this->get_parameter("imu.offsets.accelerometer.z",imu_offset_acc_z);
             this->get_parameter("imu.offsets.gyro.x",imu_offset_gyro_x);
             this->get_parameter("imu.offsets.gyro.y",imu_offset_gyro_y);
             this->get_parameter("imu.offsets.gyro.z",imu_offset_gyro_z);
+            this->get_parameter("imu.scale.accelerometer",acc_scale);
+            this->get_parameter("imu.scale.gyro",gyro_scale);
+
+            this->get_parameter("odom.frame_id",odom_link);
+            this->get_parameter("frame_id",robot_link);
+            this->get_parameter("model.size.chassis.x",model_lx);
+            this->get_parameter("model.size.chassis.y",model_ly);
+            this->get_parameter("model.size.wheel.radius",model_wheel);      
+
+            this->get_parameter("show_extra_verbose", extra_verbose);    
 
         }
 
 
-
-
+        void setImuScales(const float acc, const float gyro){
+            std::vector<uint8_t> serial_msg;
+            uint8_t dim=packeter.packetC2F('G',acc,gyro);
+            for(uint8_t i=0; i<dim; i++){
+                serial_msg.push_back(packeter.msg[i]);
+            }
+            serial_driver->port()->async_send(serial_msg);
+            serial_msg.clear();
+        }
 
     public:
 
-        AMR_Node():Node("AMR_node"),node_ctx{new IoContext(2)},serial_driver{new drivers::serial_driver::SerialDriver(*node_ctx)}{
+        AMR_Node():Node("AMR_node"),node_ctx{new IoContext(2)},serial_driver{new drivers::serial_driver::SerialDriver(*node_ctx)},packeter(100){
             vx=0.0;
             vy=0.0;
             w=0.0;
@@ -427,11 +562,15 @@ class AMR_Node: public rclcpp::Node{
             to_be_publish=false;
             imu_data_available=false;
             battery_data_available=false;
+            
+            connected = false;
 
             // Parameters
             parameters_declaration();
             get_all_parameters();
             parameters_callback_handle = add_on_set_parameters_callback(std::bind(&AMR_Node::parameters_callback, this, std::placeholders::_1));
+
+            mecanum.setDimensions(model_lx, model_ly, model_wheel);
 
 
             try{
@@ -443,17 +582,23 @@ class AMR_Node: public rclcpp::Node{
                 if (!serial_driver->port()->is_open()){
                     serial_driver->port()->open();
                     serial_driver->port()->async_receive(std::bind(&AMR_Node::serial_callback, this, std::placeholders::_1, std::placeholders::_2));
+                    RCLCPP_INFO(get_logger(),"Serial opened on %s at 115200",device_name.c_str());
                 }
             }catch(const std::exception & e){
                 RCLCPP_ERROR(get_logger(),"Error on creating serial port: %s",e.what());
             }
 
+            timeout_time=this->get_clock()->now();
+
+        
+
+            //ROS2 stuffs
             tf_bc = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
-            joy_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/cmd_vel",1,std::bind(&AMR_Node::joy_callback, this, std::placeholders::_1));
+            joy_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/amr/cmd_vel",1,std::bind(&AMR_Node::joy_callback, this, std::placeholders::_1));
             initial_pose_subscription = this->create_subscription<geometry_msgs::msg::PoseWithCovariance>("/amr/initial_pose",1,std::bind(&AMR_Node::initial_pose_callback, this, std::placeholders::_1));
             
-            odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/wheel/odometry",1);
+            odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/amr/odometry",1);
             odom_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::odom_pub_callback, this));
 
             imu_publisher = this->create_publisher<sensor_msgs::msg::Imu>("/amr/imu/raw",1);
@@ -463,9 +608,20 @@ class AMR_Node: public rclcpp::Node{
             battery_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::battery_pub_callback, this));
 
 
+            connection_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::check_connection, this));
+
         }
 
         ~AMR_Node(){
+            std::vector<uint8_t> serial_msg;
+            uint8_t dim=packeter.packetC1F('S',0.0);
+            for(uint8_t i=0; i<dim; i++){
+                serial_msg.push_back(packeter.msg[i]);
+            }
+            serial_driver->port()->async_send(serial_msg);
+            serial_msg.clear();
+
+
             if (node_ctx){
                 node_ctx->waitForExit();
             }

@@ -25,11 +25,22 @@
 #include "rclcpp/rclcpp.hpp"
 #include "ros2_amr_interface/amr_node_class.hpp"
 
+void sigIntHandler(int sig){
+  rclcpp::shutdown();
+}
 
 
 int main(int argc, char ** argv){
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<AMR_Node>());
-  rclcpp::shutdown();
+  auto node = std::make_shared<AMR_Node>();
+  signal(SIGINT, sigIntHandler);
+  try{
+    rclcpp::spin(node);
+    rclcpp::shutdown();
+  }
+  catch(const std::exception & e){
+    RCLCPP_ERROR(node->get_logger(),"Error: %s",e.what());
+  }
+  
   return 0;
 }

@@ -49,15 +49,17 @@ class ucPack {
         uint8_t payloadTop();
         //uint8_t packetize(const char * types, const uint8_t n, ...); //put bytes in msg and return msg_size;
         
-        uint8_t packetC1F(const uint8_t code,const float f);
+        uint8_t packetC1F(const uint8_t code, const float f);
         void unpacketC1F(uint8_t &code, float &f);
     
+        uint8_t packetC2F(const uint8_t code, const float f1, const float f2);
+        void unpacketC2F(uint8_t &code, float &f1, float &f2);    
             
-        uint8_t packetC4F(const uint8_t code,const float f1, const float f2, const float f3, const float f4);
+        uint8_t packetC4F(const uint8_t code, const float f1, const float f2, const float f3, const float f4);
         void unpacketC4F(uint8_t &code, float &f1, float &f2, float &f3, float &f4);
     
-        uint8_t packetC8F(const uint8_t code,const float f1, const float f2, const float f3, const float f4,
-                                             const float f5, const float f6, const float f7, const float f8);
+        uint8_t packetC8F(const uint8_t code, const float f1, const float f2, const float f3, const float f4,
+                                              const float f5, const float f6, const float f7, const float f8);
         void unpacketC8F(uint8_t &code, float &f1, float &f2, float &f3, float &f4,
                                         float &f5, float &f6, float &f7, float &f8);
     

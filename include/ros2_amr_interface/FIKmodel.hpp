@@ -30,6 +30,12 @@ class FIKmodel{
     private:
         float lx,ly,r;
     public:
+        FIKmodel(){
+            this->lx=1.0;
+            this->ly=1.0;
+            this->r=1.0;
+        };
+
         FIKmodel(const float lx, const float ly, const float r){
             this->lx=lx;
             this->ly=ly;
@@ -47,6 +53,12 @@ class FIKmodel{
             vx=(w1+w2+w3+w4)*r/4.0;
             vy=(-w1+w2+w3-w4)*r/4.0;
             w=(-w1+w2-w3+w4)*r/(4.0*(lx+ly));
+        }
+
+        void setDimensions(const float lx, const float ly, const float r){
+            this->lx=lx;
+            this->ly=ly;
+            this->r=r;
         }
 };
 
