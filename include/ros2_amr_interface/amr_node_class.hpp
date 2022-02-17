@@ -86,6 +86,9 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::TimerBase::SharedPtr battery_timer;
         rclcpp::TimerBase::SharedPtr connection_timer;
         rclcpp::Time timeout_time;
+
+
+        rclcpp::TimerBase::SharedPtr send_timer;
         
         // Subscribers and Publishers
         rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_subscription;
@@ -96,24 +99,45 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_publisher;
 
         OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle;
+        
+        
+        std::vector<uint8_t> serial_msg;
+        uint8_t dim;
+        bool cmd_is_exec=false;
 
         // Callback for /cmd_vel topic subscription
         void cmd_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
-            std::vector<uint8_t> serial_msg;
+            //std::vector<uint8_t> serial_msg;
             float w1,w2,w3,w4;
             mecanum.forward(msg->linear.x,msg->linear.y,msg->angular.z,w1,w2,w3,w4);
-            uint8_t dim=packeter.packetC4F('J',w1,w2,w3,w4);
+            //uint8_t dim=packeter.packetC4F('J',w1,w2,w3,w4);
+            dim=packeter.packetC4F('J',w1,w2,w3,w4);
             for(uint8_t i=0; i<dim; i++){
                 serial_msg.push_back(packeter.msg[i]);
             }
+            cmd_is_exec=false;
             serial_driver->port()->async_send(serial_msg);
-            serial_msg.clear();
+            send_timer = this->create_wall_timer(1ms, std::bind(&AMR_Node::send_callback, this));
+
+            //serial_msg.clear();
             //--------------------------------------------------------------------
             if (extra_verbose){
                 RCLCPP_INFO(this->get_logger(),"sent: %f\t%f\t%f\t%f",w1,w2,w3,w4);
             }
             //--------------------------------------------------------------------
         }
+
+
+        void send_callback(){
+            if (!cmd_is_exec){
+                serial_driver->port()->async_send(serial_msg);
+            }
+            else{
+                serial_msg.clear();
+                send_timer->cancel();
+            }
+        }
+
 
         // Callback for /initial_pose topic subscription
         void initial_pose_callback(const geometry_msgs::msg::PoseWithCovariance::SharedPtr msg) {
@@ -226,6 +250,10 @@ class AMR_Node: public rclcpp::Node{
                         if (g<=0){
                             RCLCPP_ERROR(this->get_logger(),"Wrong parameter on gyro scale: %f rad/s", gyro_scale);
                         }
+                    }
+
+                    if (c=='x'){
+                        cmd_is_exec=true;
                     }
                 }
                 // joints message from hardware
