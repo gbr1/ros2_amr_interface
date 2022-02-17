@@ -88,7 +88,7 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::Time timeout_time;
         
         // Subscribers and Publishers
-        rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr joy_subscription;
+        rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_subscription;
         rclcpp::Subscription<geometry_msgs::msg::PoseWithCovariance>::SharedPtr initial_pose_subscription;
         rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
         rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher;
@@ -97,8 +97,8 @@ class AMR_Node: public rclcpp::Node{
 
         OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle;
 
-        // Callback for /joy topic subscription
-        void joy_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
+        // Callback for /cmd_vel topic subscription
+        void cmd_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
             std::vector<uint8_t> serial_msg;
             float w1,w2,w3,w4;
             mecanum.forward(msg->linear.x,msg->linear.y,msg->angular.z,w1,w2,w3,w4);
@@ -575,7 +575,7 @@ class AMR_Node: public rclcpp::Node{
 
             try{
                 drivers::serial_driver::SerialPortConfig serial_config(115200,drivers::serial_driver::FlowControl::NONE,drivers::serial_driver::Parity::NONE,drivers::serial_driver::StopBits::ONE);
-                serial_driver->init_port(device_name, serial_config); //modificare con device name
+                serial_driver->init_port(device_name, serial_config);
 
                 previous_time=this->get_clock()->now();
 
@@ -595,7 +595,7 @@ class AMR_Node: public rclcpp::Node{
             //ROS2 stuffs
             tf_bc = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
-            joy_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/amr/cmd_vel",1,std::bind(&AMR_Node::joy_callback, this, std::placeholders::_1));
+            cmd_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/amr/cmd_vel",1,std::bind(&AMR_Node::cmd_callback, this, std::placeholders::_1));
             initial_pose_subscription = this->create_subscription<geometry_msgs::msg::PoseWithCovariance>("/amr/initial_pose",1,std::bind(&AMR_Node::initial_pose_callback, this, std::placeholders::_1));
             
             odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/amr/odometry",1);
