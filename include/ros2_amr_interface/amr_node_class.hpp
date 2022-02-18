@@ -58,6 +58,7 @@ class AMR_Node: public rclcpp::Node{
         double imu_offset_acc_x, imu_offset_acc_y, imu_offset_acc_z, imu_offset_gyro_x, imu_offset_gyro_y, imu_offset_gyro_z, acc_scale, gyro_scale;
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
+        float dtheta, dx, dy;
         float battery;
         bool publishTF;
         float timeout_connection;
@@ -112,10 +113,10 @@ class AMR_Node: public rclcpp::Node{
 
         // Callback for /cmd_vel topic subscription
         void cmd_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
-            //std::vector<uint8_t> serial_msg;
             float w1,w2,w3,w4;
-            fik_model.forward(msg->linear.x,msg->linear.y,msg->angular.z,w1,w2,w3,w4);
-            //uint8_t dim=packeter.packetC4F('J',w1,w2,w3,w4);
+            fik_model.setVelocities(msg->linear.x,msg->linear.y,msg->angular.z);
+            fik_model.forward();
+            fik_model.getJoints(w1,w2,w3,w4);
             dim=packeter.packetC4F('J',w1,w2,w3,w4);
             for(uint8_t i=0; i<dim; i++){
                 serial_msg.push_back(packeter.msg[i]);
@@ -124,7 +125,6 @@ class AMR_Node: public rclcpp::Node{
             serial_driver->port()->async_send(serial_msg);
             send_timer = this->create_wall_timer(1ms, std::bind(&AMR_Node::send_callback, this));
 
-            //serial_msg.clear();
             //--------------------------------------------------------------------
             if (extra_verbose){
                 RCLCPP_INFO(this->get_logger(),"sent: %f\t%f\t%f\t%f",w1,w2,w3,w4);
@@ -190,14 +190,15 @@ class AMR_Node: public rclcpp::Node{
                             RCLCPP_INFO(this->get_logger(),"joints: %f\t%f\t%f\t%f",c,w1,w2,w3,w4);
                         }
                         //---------------------------------------------------------------------------
-                        fik_model.inverse(w1,w2,w3,w4,vx,vy,w);
-                        //RCLCPP_INFO(this->get_logger(),"odom: %f\t%f\t%f",vx,vy,w);
+                        fik_model.setJoints(w1,w2,w3,w4);
+                        fik_model.inverse();
+                        fik_model.getVelocities(vx,vy,w);
                         dt=now.seconds()-previous_time.seconds();
                         previous_time=now;
                         
-                        float dtheta=w*dt;
-                        float dx=(vx*cos(theta)-vy*sin(theta))*dt;
-                        float dy=(vx*sin(theta)+vy*cos(theta))*dt;
+                        dtheta=w*dt;
+                        dx=(vx*cos(theta)-vy*sin(theta))*dt;
+                        dy=(vx*sin(theta)+vy*cos(theta))*dt;
                         x+=dx;
                         y+=dy;
                         theta+=dtheta;
@@ -576,6 +577,7 @@ class AMR_Node: public rclcpp::Node{
                 this->get_parameter("model.size.chassis.y",model_ly);
                 this->get_parameter("model.size.wheel.radius",model_wheel);
 
+                fik_model.setModel(FIKmodel::model::MECANUM);
                 fik_model.setDimensions(model_lx, model_ly, model_wheel);
             } else
 
@@ -583,7 +585,12 @@ class AMR_Node: public rclcpp::Node{
                 this->declare_parameter<float>("model.size.chassis.wheel_separation",0.16);
                 this->declare_parameter<float>("model.size.wheel.radius",0.03);
 
-                
+                fik_model.setModel(FIKmodel::model::DIFFERENTIAL);
+                this->get_parameter("model.size.chassis.wheel_separation",model_ly);
+                this->get_parameter("model.size.wheel.radius",model_wheel);
+                fik_model.setDimensions(model_ly, model_wheel);
+
+
             } else {
                 RCLCPP_ERROR(this->get_logger(),"wrong paramenter on model.type, it can't be %s", model.c_str());
                 this->~AMR_Node();
@@ -613,6 +620,9 @@ class AMR_Node: public rclcpp::Node{
             y=0.0;
             theta=0.0;
             dt=0.0;
+            dtheta=0.0;
+            dx=0.0;
+            dy=0.0;
             battery=0.0;
 
             to_be_publish=false;
