@@ -100,10 +100,11 @@ class AMR_Node: public rclcpp::Node{
 
         OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle;
         
-        
         std::vector<uint8_t> serial_msg;
         uint8_t dim;
-        bool cmd_is_exec=false;
+        bool cmd_is_exec;
+        bool closing_is_exec;
+
 
         // Callback for /cmd_vel topic subscription
         void cmd_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
@@ -197,7 +198,7 @@ class AMR_Node: public rclcpp::Node{
                         x+=dx;
                         y+=dy;
                         theta+=dtheta;
-                    }
+                    } else
                     
                     // imu message from hardware
                     if (c=='i'){
@@ -209,7 +210,7 @@ class AMR_Node: public rclcpp::Node{
                         }
                         //-----------------------------------------------------------------------------------------
                         imu_data_available=true;
-                    }
+                    } else
                 
                     // battery message from hardware
                     if (c=='b'){
@@ -221,10 +222,10 @@ class AMR_Node: public rclcpp::Node{
 
                         //-----------------------------------------------------------------------------------------
                         battery_data_available=true;
-                    }
+                    } else
 
-                    // battery message from hardware
                     if (c=='s'){
+                        closing_is_exec=true;
                         float f;
                         packeter.unpacketC1F(c,f);
                         //-----------------------------------------------------------------------------------------
@@ -232,14 +233,12 @@ class AMR_Node: public rclcpp::Node{
                         //-----------------------------------------------------------------------------------------
                         if (try_reconnect){
                             connected=false;
-                            RCLCPP_WARN(this->get_logger(),"Try reconnecting to the hardware");
+                            RCLCPP_WARN(this->get_logger(),"Try reconnecting to the hardware. If this message is repeated, check your hardware");
                         }
                         else{
-                            RCLCPP_WARN(this->get_logger(),"Closing the AMR interface, check your hardware");
-                            //this->AMR_Node::~AMR_Node();
                             rclcpp::shutdown();
                         }
-                    }
+                    } else
 
                     if (c=='g'){
                         float a,g;
@@ -250,8 +249,9 @@ class AMR_Node: public rclcpp::Node{
                         if (g<=0){
                             RCLCPP_ERROR(this->get_logger(),"Wrong parameter on gyro scale: %f rad/s", gyro_scale);
                         }
-                    }
+                    } else
 
+                    // hardware received joint command
                     if (c=='x'){
                         cmd_is_exec=true;
                     }
@@ -503,7 +503,7 @@ class AMR_Node: public rclcpp::Node{
             else{
                 if ((this->get_clock()->now().seconds()-timeout_time.seconds())>timeout_connection){
                     RCLCPP_WARN(this->get_logger(),"serial connection is timed out, no message in about %f seconds despite %f setted", this->get_clock()->now().seconds()-timeout_time.seconds(),timeout_connection);
-                    RCLCPP_WARN(this->get_logger(),"Trying to restart the board");
+                    RCLCPP_WARN(this->get_logger(),"Trying to restart hardware");
                     connected=false;
                 }
             }
@@ -593,6 +593,9 @@ class AMR_Node: public rclcpp::Node{
             
             connected = false;
 
+            cmd_is_exec=false;
+            closing_is_exec=false;
+
             // Parameters
             parameters_declaration();
             get_all_parameters();
@@ -646,9 +649,12 @@ class AMR_Node: public rclcpp::Node{
             for(uint8_t i=0; i<dim; i++){
                 serial_msg.push_back(packeter.msg[i]);
             }
-            serial_driver->port()->async_send(serial_msg);
+            closing_is_exec=false;
+            while(!closing_is_exec){
+                serial_driver->port()->async_send(serial_msg);
+                usleep(10000);
+            }
             serial_msg.clear();
-
 
             if (node_ctx){
                 node_ctx->waitForExit();
