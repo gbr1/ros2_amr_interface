@@ -27,6 +27,7 @@
 
 void sigIntHandler(int sig){
   rclcpp::shutdown();
+  (void)(sig);
 }
 
 
