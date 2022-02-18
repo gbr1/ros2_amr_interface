@@ -73,13 +73,19 @@ source install/setup.bash
 `imu.scale.gyro`, _float_, range of rad/s<br>
 
 ### Model
-
-`model.size.chassis.x`, _float_, lx on mecanum model<br>
-`model.size.chassis.y`, _float_, ly on mecanum model<br>
-`model.size.wheel.radius`, _float_, wheel radius on mecanum model<br>
 `publishTF`, _bool_, broadcast the transformation for odometry<br>
 `frame_id`, _std::string_, robot frame id<br>
 `odom.frame_id`, _std::string_, frame id for odometry<br>
+<br>
+`model.type`, _std::string_, default: "mecanum", options: "mecanum", "differential"<br>
+- for mecanum:<br>
+    - `model.size.chassis.x`, _float_, lx on mecanum model
+    - `model.size.chassis.y`, _float_, ly on mecanum model
+    - `model.size.wheel.radius`, _float_, wheel radius on mecanum model<br>
+- for differential:<br>
+    - `model.size.chassis.wheel_separation`, _float_, distance between two wheels
+    - `model.size.wheel.radius`, _float_, wheel radius on differential model
+
 
 ---
 
@@ -95,9 +101,10 @@ source install/setup.bash
 - [x] add launch file as example
 - [x] create a namespace for topics (e.g. /amr/cmd_vel)
 - [x] add timeout
+- [x] add diff drive mode
 - [ ] refactor code in files
 - [ ] add Lifecycle
-- [ ] add diff drive mode
+
 
 
 > ***Copyright (c) 2022 G. Bruno under MIT license***

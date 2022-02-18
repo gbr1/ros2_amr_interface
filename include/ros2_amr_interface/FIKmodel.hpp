@@ -22,44 +22,254 @@
  * THE SOFTWARE.
  */
 
+#ifndef __FIKmodel_HPP__
+#define __FIKmodel_HPP__
 
-#ifndef _FIK_MODEL_HPP_
-#define _FIK_MODEL_HPP
+#include <stdint.h>
+#include <vector>
 
 class FIKmodel{
     private:
-        float lx,ly,r;
+        float lx,ly,wheel_radius;
+        float vx, vy, w;
+        std::vector<float> joints;
+
     public:
+        std::function<void()> forward;
+        std::function<void()> inverse;
+        enum model { MECANUM, DIFFERENTIAL, SKID};
+
         FIKmodel(){
-            this->lx=1.0;
-            this->ly=1.0;
-            this->r=1.0;
+            //put something wrong and different by 0.0
+            this->lx=-1.0;
+            this->ly=-1.0;
+            this->wheel_radius=-1.0;
+            vx=0.0;
+            vy=0.0;
+            w=0.0;
         };
 
-        FIKmodel(const float lx, const float ly, const float r){
-            this->lx=lx;
+        FIKmodel(const model m){
+            setModel(m);
+            vx=0.0;
+            vy=0.0;
+            w=0.0;
+            for (uint8_t i=0; i<joints.size(); i++){
+                joints[i]=0.0;
+            }
+        }
+    
+        void setModel(const model m=MECANUM){
+            if (m==MECANUM){
+                forward=std::bind(&FIKmodel::forward_mecanum,this);
+                inverse=std::bind(&FIKmodel::inverse_mecanum,this);
+                joints.resize(4);
+            } else
+            if (m==DIFFERENTIAL){
+                forward=std::bind(&FIKmodel::forward_differential,this);
+                inverse=std::bind(&FIKmodel::inverse_differential,this);
+                joints.resize(4);
+            } else
+            if (m==SKID){
+                forward=std::bind(&FIKmodel::forward_skid,this);
+                inverse=std::bind(&FIKmodel::inverse_skid,this);
+                joints.resize(4);
+            }
+        }
+    
+    
+        //------------------------------------------------------------------------------------//
+        //                                  MECANUM MODEL                                     //
+        //------------------------------------------------------------------------------------//
+    
+        /*
+         
+                      ly
+                  <------->
+         
+                +---+           +---+
+                | 0 |-----------| 1 |       ^
+                +---+     ^     +---+       |
+                  |   \   ^   /   |         | lx
+                  |       ^       |         |
+                  |       O       |         v
+                  |               |
+                  |   /       \   |
+                +---+           +---+
+                | 2 |-----------| 3 |
+                +---+           +---+
+         
+                0: left_front_joint
+                1: right_front_joint
+                2: left_rear_joint
+                3: right_rear_joint
+         
+        */
+        
+        void forward_mecanum(){
+            joints[0]=(vx-vy-w*(lx+ly))/wheel_radius;
+            joints[1]=(vx+vy+w*(lx+ly))/wheel_radius;
+            joints[2]=(vx+vy-w*(lx+ly))/wheel_radius;
+            joints[3]=(vx-vy+w*(lx+ly))/wheel_radius;
+        }
+    
+        void inverse_mecanum(){
+            vx=(joints[0]+joints[1]+joints[2]+joints[3])*wheel_radius/4.0;
+            vy=(-joints[0]+joints[1]+joints[2]-joints[3])*wheel_radius/4.0;
+            w=(-joints[0]+joints[1]-joints[2]+joints[3])*wheel_radius/(4.0*(lx+ly));
+        }
+    
+        //------------------------------------------------------------------------------------//
+        //                                  DIFFERENTIAL MODEL                                //
+        //------------------------------------------------------------------------------------//
+
+        /*
+         
+                         ly
+                  <--------------->
+                    
+                  +---------------+
+                  |       ^       |
+                  |       ^       |         
+                +---+     ^     +---+
+                |   |           |   |
+                | 0 |     O     | 1 |
+                |   |           |   |
+                +---+           +---+
+                  |               |
+                  |               |
+                  +---------------+
+         
+                0: left_joint
+                1: right_joint
+         
+        */
+    
+        void forward_differential(){
+            joints[0]=(2.0*vx-w*ly)/(2.0*wheel_radius);
+            joints[1]=(2.0*vx+w*ly)/(2.0*wheel_radius);
+            joints[2]=0.0;
+            joints[3]=0.0;
+        }
+
+        void inverse_differential(){
+            vx=(joints[0]+joints[1])*wheel_radius/2.0;
+            vy=0.0;
+            w=(-joints[0]+joints[1])*wheel_radius/ly;
+        }
+
+    
+    
+        //------------------------------------------------------------------------------------//
+        //                                  SKID MODEL                                        //
+        //------------------------------------------------------------------------------------//
+
+        /*
+         
+                      ly
+                  <------->
+         
+                +---+           +---+
+                | 0 |-----------| 1 |       ^
+                +---+     ^     +---+       |
+                  |       ^       |         | lx
+                  |       ^       |         |
+                  |       O       |         v
+                  |               |
+                  |               |
+                +---+           +---+
+                | 2 |-----------| 3 |
+                +---+           +---+
+         
+                0: left_front_joint
+                1: right_front_joint
+                2: left_rear_joint
+                3: right_rear_joint
+         
+        */
+
+        void forward_skid(){
+            joints[0]=0.0;
+            joints[1]=0.0;
+            joints[2]=0.0;
+            joints[3]=0.0;
+        }
+
+        void inverse_skid(){
+            vx=0.0;
+            vy=0.0;
+            w=0.0;
+        }
+    
+    
+    
+    
+    
+    
+    
+        //------------------------------------------------------------------------------------//
+        //                                  Generic interface                                 //
+        //------------------------------------------------------------------------------------//
+    
+        void setDimensions(const float ly, const float r){
+            this->lx=0.0; //unused for differential
             this->ly=ly;
-            this->r=r;
+            this->wheel_radius=r;
         }
-
-        void forward(const float vx, const float vy, const float w, float & w1, float & w2, float & w3, float & w4){
-            w1=(vx-vy-w*(lx+ly))/r;
-            w2=(vx+vy+w*(lx+ly))/r;
-            w3=(vx+vy-w*(lx+ly))/r;
-            w4=(vx-vy+w*(lx+ly))/r;
-        }
-
-        void inverse(const float w1, const float w2, const float w3, const float w4, float & vx, float & vy, float & w){
-            vx=(w1+w2+w3+w4)*r/4.0;
-            vy=(-w1+w2+w3-w4)*r/4.0;
-            w=(-w1+w2-w3+w4)*r/(4.0*(lx+ly));
-        }
-
+        
         void setDimensions(const float lx, const float ly, const float r){
             this->lx=lx;
             this->ly=ly;
-            this->r=r;
+            this->wheel_radius=r;
         }
+    
+        void getJoints(float & w0, float & w1){
+            w0=joints[0];
+            w1=joints[1];
+        }
+        
+        void getJoints(float & w0, float & w1, float & w2, float & w3){
+            w0=joints[0];
+            w1=joints[1];
+            w2=joints[2];
+            w3=joints[3];
+        }
+    
+        void setVelocities(const float vel_x, const float vel_w){
+            vx=vel_x;
+            w=vel_w;
+        }
+    
+        void setVelocities(const float vel_x, const float vel_y, const float vel_w){
+            vx=vel_x;
+            vy=vel_y;
+            w=vel_w;
+        }
+
+        void setJoints(const float w0, const float & w1){
+            joints[0]=w0;
+            joints[1]=w1;
+        }
+        
+        void setJoints(const float w0, const float w1, const float w2, const float w3){
+            joints[0]=w0;
+            joints[1]=w1;
+            joints[2]=w2;
+            joints[3]=w3;
+        }
+    
+        void getVelocities(float & vel_x, float & vel_w){
+            vel_x=vx;
+            vel_w=w;
+        }
+    
+        void getVelocities(float & vel_x, float & vel_y, float & vel_w){
+            vel_x=vx;
+            vel_y=vy;
+            vel_w=w;
+        }
+        
 };
 
-#endif
+
+#endif /* FIKmodel_h */

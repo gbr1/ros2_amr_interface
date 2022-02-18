@@ -52,12 +52,13 @@ using namespace std::chrono_literals;
 
 class AMR_Node: public rclcpp::Node{
     private:
-        FIKmodel mecanum;
+        FIKmodel fik_model;
+        std::string model;
         float model_lx, model_ly, model_wheel;
-        ucPack packeter;
         double imu_offset_acc_x, imu_offset_acc_y, imu_offset_acc_z, imu_offset_gyro_x, imu_offset_gyro_y, imu_offset_gyro_z, acc_scale, gyro_scale;
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
+        float dtheta, dx, dy;
         float battery;
         bool publishTF;
         float timeout_connection;
@@ -77,7 +78,10 @@ class AMR_Node: public rclcpp::Node{
         std::unique_ptr<IoContext> node_ctx{};
         std::string device_name;
         std::unique_ptr<drivers::serial_driver::SerialPortConfig> device_config;
-        std::unique_ptr<drivers::serial_driver::SerialDriver> serial_driver;
+        std::unique_ptr<drivers::serial_driver::SerialDriver> serial_driver{};
+
+        ucPack packeter;
+
       
         // Timers and times
         rclcpp::Time previous_time;
@@ -86,9 +90,12 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::TimerBase::SharedPtr battery_timer;
         rclcpp::TimerBase::SharedPtr connection_timer;
         rclcpp::Time timeout_time;
+
+
+        rclcpp::TimerBase::SharedPtr send_timer;
         
         // Subscribers and Publishers
-        rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr joy_subscription;
+        rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_subscription;
         rclcpp::Subscription<geometry_msgs::msg::PoseWithCovariance>::SharedPtr initial_pose_subscription;
         rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
         rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher;
@@ -96,23 +103,44 @@ class AMR_Node: public rclcpp::Node{
         rclcpp::Publisher<sensor_msgs::msg::BatteryState>::SharedPtr battery_publisher;
 
         OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle;
+        
+        std::vector<uint8_t> serial_msg;
+        uint8_t dim;
+        bool cmd_is_exec;
+        bool closing_is_exec;
+        bool ask_to_close;
 
-        // Callback for /joy topic subscription
-        void joy_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
-            std::vector<uint8_t> serial_msg;
+
+        // Callback for /cmd_vel topic subscription
+        void cmd_callback(const geometry_msgs::msg::Twist::SharedPtr msg){
             float w1,w2,w3,w4;
-            mecanum.forward(msg->linear.x,msg->linear.y,msg->angular.z,w1,w2,w3,w4);
-            uint8_t dim=packeter.packetC4F('J',w1,w2,w3,w4);
+            fik_model.setVelocities(msg->linear.x,msg->linear.y,msg->angular.z);
+            fik_model.forward();
+            fik_model.getJoints(w1,w2,w3,w4);
+            dim=packeter.packetC4F('J',w1,w2,w3,w4);
             for(uint8_t i=0; i<dim; i++){
                 serial_msg.push_back(packeter.msg[i]);
             }
+            cmd_is_exec=false;
             serial_driver->port()->async_send(serial_msg);
-            serial_msg.clear();
+            send_timer = this->create_wall_timer(1ms, std::bind(&AMR_Node::send_callback, this));
+
             //--------------------------------------------------------------------
             if (extra_verbose){
                 RCLCPP_INFO(this->get_logger(),"sent: %f\t%f\t%f\t%f",w1,w2,w3,w4);
             }
             //--------------------------------------------------------------------
+        }
+
+        // Callback to resend joint message until ack from hardware
+        void send_callback(){
+            if (!cmd_is_exec){
+                serial_driver->port()->async_send(serial_msg);
+            }
+            else{
+                serial_msg.clear();
+                send_timer->cancel();
+            }
         }
 
         // Callback for /initial_pose topic subscription
@@ -162,18 +190,19 @@ class AMR_Node: public rclcpp::Node{
                             RCLCPP_INFO(this->get_logger(),"joints: %f\t%f\t%f\t%f",c,w1,w2,w3,w4);
                         }
                         //---------------------------------------------------------------------------
-                        mecanum.inverse(w1,w2,w3,w4,vx,vy,w);
-                        //RCLCPP_INFO(this->get_logger(),"odom: %f\t%f\t%f",vx,vy,w);
+                        fik_model.setJoints(w1,w2,w3,w4);
+                        fik_model.inverse();
+                        fik_model.getVelocities(vx,vy,w);
                         dt=now.seconds()-previous_time.seconds();
                         previous_time=now;
                         
-                        float dtheta=w*dt;
-                        float dx=(vx*cos(theta)-vy*sin(theta))*dt;
-                        float dy=(vx*sin(theta)+vy*cos(theta))*dt;
+                        dtheta=w*dt;
+                        dx=(vx*cos(theta)-vy*sin(theta))*dt;
+                        dy=(vx*sin(theta)+vy*cos(theta))*dt;
                         x+=dx;
                         y+=dy;
                         theta+=dtheta;
-                    }
+                    } else
                     
                     // imu message from hardware
                     if (c=='i'){
@@ -185,7 +214,7 @@ class AMR_Node: public rclcpp::Node{
                         }
                         //-----------------------------------------------------------------------------------------
                         imu_data_available=true;
-                    }
+                    } else
                 
                     // battery message from hardware
                     if (c=='b'){
@@ -197,25 +226,23 @@ class AMR_Node: public rclcpp::Node{
 
                         //-----------------------------------------------------------------------------------------
                         battery_data_available=true;
-                    }
+                    } else
 
-                    // battery message from hardware
                     if (c=='s'){
+                        closing_is_exec=true;
                         float f;
                         packeter.unpacketC1F(c,f);
                         //-----------------------------------------------------------------------------------------
                         RCLCPP_WARN(this->get_logger(),"Hardware is stopped");
                         //-----------------------------------------------------------------------------------------
-                        if (try_reconnect){
+                        if (try_reconnect&&!ask_to_close){
                             connected=false;
-                            RCLCPP_WARN(this->get_logger(),"Try reconnecting to the hardware");
+                            RCLCPP_WARN(this->get_logger(),"Try reconnecting to the hardware. If this message is repeated, check your hardware");
                         }
                         else{
-                            RCLCPP_WARN(this->get_logger(),"Closing the AMR interface, check your hardware");
-                            //this->AMR_Node::~AMR_Node();
                             rclcpp::shutdown();
                         }
-                    }
+                    } else
 
                     if (c=='g'){
                         float a,g;
@@ -226,6 +253,11 @@ class AMR_Node: public rclcpp::Node{
                         if (g<=0){
                             RCLCPP_ERROR(this->get_logger(),"Wrong parameter on gyro scale: %f rad/s", gyro_scale);
                         }
+                    } else
+
+                    // hardware received joint command
+                    if (c=='x'){
+                        cmd_is_exec=true;
                     }
                 }
                 // joints message from hardware
@@ -475,7 +507,7 @@ class AMR_Node: public rclcpp::Node{
             else{
                 if ((this->get_clock()->now().seconds()-timeout_time.seconds())>timeout_connection){
                     RCLCPP_WARN(this->get_logger(),"serial connection is timed out, no message in about %f seconds despite %f setted", this->get_clock()->now().seconds()-timeout_time.seconds(),timeout_connection);
-                    RCLCPP_WARN(this->get_logger(),"Trying to restart the board");
+                    RCLCPP_WARN(this->get_logger(),"Trying to restart hardware");
                     connected=false;
                 }
             }
@@ -502,14 +534,11 @@ class AMR_Node: public rclcpp::Node{
 
             this->declare_parameter<std::string>("odom.frame_id","odom");
             this->declare_parameter<std::string>("frame_id","base_link");
-            this->declare_parameter<float>("model.size.chassis.x",0.0825);
-            this->declare_parameter<float>("model.size.chassis.y",0.105);
-            this->declare_parameter<float>("model.size.wheel.radius",0.04);
 
             this->declare_parameter<bool>("show_extra_verbose", false);
         }
 
-        //Load static parameters
+        // Load static parameters
         void get_all_parameters(){
             this->get_parameter("port_name",device_name);
             this->get_parameter("timeout_connection",timeout_connection);
@@ -527,13 +556,47 @@ class AMR_Node: public rclcpp::Node{
             this->get_parameter("imu.scale.gyro",gyro_scale);
 
             this->get_parameter("odom.frame_id",odom_link);
-            this->get_parameter("frame_id",robot_link);
-            this->get_parameter("model.size.chassis.x",model_lx);
-            this->get_parameter("model.size.chassis.y",model_ly);
-            this->get_parameter("model.size.wheel.radius",model_wheel);      
+            this->get_parameter("frame_id",robot_link);   
 
             this->get_parameter("show_extra_verbose", extra_verbose);    
 
+        }
+
+        // Math model parameters
+        void model_parameters(){
+
+            this->declare_parameter<std::string>("model.type","mecanum");
+            this->get_parameter("model.type",model);
+
+            if (model.compare("mecanum")==0){
+                this->declare_parameter<float>("model.size.chassis.x",0.0825);
+                this->declare_parameter<float>("model.size.chassis.y",0.105);
+                this->declare_parameter<float>("model.size.wheel.radius",0.04);
+
+                this->get_parameter("model.size.chassis.x",model_lx);
+                this->get_parameter("model.size.chassis.y",model_ly);
+                this->get_parameter("model.size.wheel.radius",model_wheel);
+
+                fik_model.setModel(FIKmodel::model::MECANUM);
+                fik_model.setDimensions(model_lx, model_ly, model_wheel);
+            } else
+
+            if (model.compare("differential")==0){
+                this->declare_parameter<float>("model.size.chassis.wheel_separation",0.16);
+                this->declare_parameter<float>("model.size.wheel.radius",0.03);
+
+                fik_model.setModel(FIKmodel::model::DIFFERENTIAL);
+                this->get_parameter("model.size.chassis.wheel_separation",model_ly);
+                this->get_parameter("model.size.wheel.radius",model_wheel);
+                fik_model.setDimensions(model_ly, model_wheel);
+
+
+            } else {
+                RCLCPP_ERROR(this->get_logger(),"wrong paramenter on model.type, it can't be %s", model.c_str());
+                this->~AMR_Node();
+            }
+            
+                       
         }
 
 
@@ -549,7 +612,7 @@ class AMR_Node: public rclcpp::Node{
 
     public:
 
-        AMR_Node():Node("AMR_node"),node_ctx{new IoContext(2)},serial_driver{new drivers::serial_driver::SerialDriver(*node_ctx)},packeter(100){
+        AMR_Node():Node("AMR_node"),node_ctx(new IoContext(2)),serial_driver(new drivers::serial_driver::SerialDriver(*node_ctx)),packeter(100){
             vx=0.0;
             vy=0.0;
             w=0.0;
@@ -557,6 +620,9 @@ class AMR_Node: public rclcpp::Node{
             y=0.0;
             theta=0.0;
             dt=0.0;
+            dtheta=0.0;
+            dx=0.0;
+            dy=0.0;
             battery=0.0;
 
             to_be_publish=false;
@@ -565,62 +631,76 @@ class AMR_Node: public rclcpp::Node{
             
             connected = false;
 
+            cmd_is_exec=false;
+            closing_is_exec=false;
+            ask_to_close=false;
+
             // Parameters
             parameters_declaration();
             get_all_parameters();
+            model_parameters();
             parameters_callback_handle = add_on_set_parameters_callback(std::bind(&AMR_Node::parameters_callback, this, std::placeholders::_1));
-
-            mecanum.setDimensions(model_lx, model_ly, model_wheel);
+            
 
 
             try{
                 drivers::serial_driver::SerialPortConfig serial_config(115200,drivers::serial_driver::FlowControl::NONE,drivers::serial_driver::Parity::NONE,drivers::serial_driver::StopBits::ONE);
-                serial_driver->init_port(device_name, serial_config); //modificare con device name
+                serial_driver->init_port(device_name, serial_config);
 
                 previous_time=this->get_clock()->now();
 
                 if (!serial_driver->port()->is_open()){
                     serial_driver->port()->open();
-                    serial_driver->port()->async_receive(std::bind(&AMR_Node::serial_callback, this, std::placeholders::_1, std::placeholders::_2));
-                    RCLCPP_INFO(get_logger(),"Serial opened on %s at 115200",device_name.c_str());
                 }
+
+                RCLCPP_INFO(get_logger(),"Serial opened on %s at 115200",device_name.c_str());
+
+
+                //ROS2 stuffs
+                timeout_time=this->get_clock()->now();
+
+                tf_bc = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+
+                cmd_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/amr/cmd_vel",1,std::bind(&AMR_Node::cmd_callback, this, std::placeholders::_1));
+                initial_pose_subscription = this->create_subscription<geometry_msgs::msg::PoseWithCovariance>("/amr/initial_pose",1,std::bind(&AMR_Node::initial_pose_callback, this, std::placeholders::_1));
+                
+                odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/amr/odometry",1);
+                odom_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::odom_pub_callback, this));
+
+                imu_publisher = this->create_publisher<sensor_msgs::msg::Imu>("/amr/imu/raw",1);
+                imu_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::imu_pub_callback, this));
+
+                battery_publisher = this->create_publisher<sensor_msgs::msg::BatteryState>("/amr/battery",1);
+                battery_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::battery_pub_callback, this));
+
+                if (serial_driver->port()->is_open()){
+                    serial_driver->port()->async_receive(std::bind(&AMR_Node::serial_callback, this, std::placeholders::_1, std::placeholders::_2));
+                    connection_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::check_connection, this));
+                }
+
             }catch(const std::exception & e){
-                RCLCPP_ERROR(get_logger(),"Error on creating serial port: %s",e.what());
+                RCLCPP_ERROR(get_logger(),"Error on creating serial port: %s",device_name.c_str());
+                this->~AMR_Node();
             }
-
-            timeout_time=this->get_clock()->now();
-
-        
-
-            //ROS2 stuffs
-            tf_bc = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
-
-            joy_subscription = this->create_subscription<geometry_msgs::msg::Twist>("/amr/cmd_vel",1,std::bind(&AMR_Node::joy_callback, this, std::placeholders::_1));
-            initial_pose_subscription = this->create_subscription<geometry_msgs::msg::PoseWithCovariance>("/amr/initial_pose",1,std::bind(&AMR_Node::initial_pose_callback, this, std::placeholders::_1));
-            
-            odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/amr/odometry",1);
-            odom_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::odom_pub_callback, this));
-
-            imu_publisher = this->create_publisher<sensor_msgs::msg::Imu>("/amr/imu/raw",1);
-            imu_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::imu_pub_callback, this));
-
-            battery_publisher = this->create_publisher<sensor_msgs::msg::BatteryState>("/amr/battery",1);
-            battery_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::battery_pub_callback, this));
-
-
-            connection_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::check_connection, this));
-
         }
 
         ~AMR_Node(){
-            std::vector<uint8_t> serial_msg;
-            uint8_t dim=packeter.packetC1F('S',0.0);
-            for(uint8_t i=0; i<dim; i++){
-                serial_msg.push_back(packeter.msg[i]);
+            closing_is_exec=false;
+            ask_to_close=true;
+            if (serial_driver->port()->is_open()){
+                std::vector<uint8_t> serial_msg;
+                uint8_t dim=packeter.packetC1F('S',0.0);
+                for(uint8_t i=0; i<dim; i++){
+                    serial_msg.push_back(packeter.msg[i]);
+                }
+                closing_is_exec=false;
+                while(!closing_is_exec){
+                    serial_driver->port()->async_send(serial_msg);
+                    usleep(10000);
+                }
+                serial_msg.clear();
             }
-            serial_driver->port()->async_send(serial_msg);
-            serial_msg.clear();
-
+            
 
             if (node_ctx){
                 node_ctx->waitForExit();
