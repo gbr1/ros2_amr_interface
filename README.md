@@ -8,14 +8,9 @@ Lightweight package to get AMRs working with ROS2.
 
 ## Nodes
 
-- [amr_interface_node](.docs/nodes.md)
-
-<br>
-<br>
+- [amr_interface_node](./docs/nodes.md)
 
 ---
-
-
 
 ## How install
 
