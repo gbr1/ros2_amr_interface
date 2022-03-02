@@ -35,14 +35,14 @@ or<br>
 - `odom.frame_id` [ odom ], _std::string_, frame id for odometry<br>
 - `model.type` [ mecanum ], _std::string_, options: "mecanum", "differential" and "skid"<br>
     - for mecanum:<br>
-        - `model.size.chassis.x` [ 0.0825 ], _float_, lx on mecanum model
-        - `model.size.chassis.y` [ 0.105 ], _float_, ly on mecanum model
+        - `model.size.chassis.x` [ 0.0825 ], _float_, lx on mecanum model (half of the wheel base)
+        - `model.size.chassis.y` [ 0.105 ], _float_, ly on mecanum model (half of the distance between left wheels and right wheels)
         - `model.size.wheel.radius` [ 0.04 ], _float_, wheel radius on mecanum model<br>
     - for differential:<br>
         - `model.size.chassis.wheel_separation` [0.15], _float_, distance between two wheels
         - `model.size.wheel.radius` [0.0325], _float_, wheel radius on differential model
     - for skid:<br>
-        - `model.size.chassis.wheel_separation` [ 0.0825 ], _float_, distance between left wheels and right wheels
+        - `model.size.chassis.wheel_separation` [ 0.0825 ], _float_, half of the distance between left wheels and right wheelss
         - `model.size.wheel.radius` [ 0.04 ], _float_, wheel radius
 
 ## Dynamic parameters
