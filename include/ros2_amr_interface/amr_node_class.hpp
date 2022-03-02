@@ -77,6 +77,7 @@ class AMR_Node: public rclcpp::Node{
         // Required for serial communication
         std::unique_ptr<IoContext> node_ctx{};
         std::string device_name;
+        int baud_rate;
         std::unique_ptr<drivers::serial_driver::SerialPortConfig> device_config;
         std::unique_ptr<drivers::serial_driver::SerialDriver> serial_driver{};
 
@@ -517,6 +518,7 @@ class AMR_Node: public rclcpp::Node{
         // Here are declared all parameters
         void parameters_declaration(){
             this->declare_parameter<std::string>("port_name","/dev/ttyUSB0");
+            this->declare_parameter<int>("baud_rate",115200);
             this->declare_parameter<float>("timeout_connection",60.0);
             this->declare_parameter<bool>("try_reconnect",true);
             this->declare_parameter<bool>("publishTF",true);
@@ -541,6 +543,7 @@ class AMR_Node: public rclcpp::Node{
         // Load static parameters
         void get_all_parameters(){
             this->get_parameter("port_name",device_name);
+            this->get_parameter("baud_rate",baud_rate);
             this->get_parameter("timeout_connection",timeout_connection);
             this->get_parameter("try_reconnect",try_reconnect);
             this->get_parameter("publishTF",publishTF);
@@ -589,8 +592,16 @@ class AMR_Node: public rclcpp::Node{
                 this->get_parameter("model.size.chassis.wheel_separation",model_ly);
                 this->get_parameter("model.size.wheel.radius",model_wheel);
                 fik_model.setDimensions(model_ly, model_wheel);
+            }else
 
+            if (model.compare("skid")==0){
+                this->declare_parameter<float>("model.size.chassis.wheel_separation",0.0825);
+                this->declare_parameter<float>("model.size.wheel.radius",0.105);
 
+                fik_model.setModel(FIKmodel::model::SKID);
+                this->get_parameter("model.size.chassis.wheel_separation",model_ly);
+                this->get_parameter("model.size.wheel.radius",model_wheel);
+                fik_model.setDimensions(model_ly, model_wheel);
             } else {
                 RCLCPP_ERROR(this->get_logger(),"wrong paramenter on model.type, it can't be %s", model.c_str());
                 this->~AMR_Node();
@@ -644,7 +655,7 @@ class AMR_Node: public rclcpp::Node{
 
 
             try{
-                drivers::serial_driver::SerialPortConfig serial_config(115200,drivers::serial_driver::FlowControl::NONE,drivers::serial_driver::Parity::NONE,drivers::serial_driver::StopBits::ONE);
+                drivers::serial_driver::SerialPortConfig serial_config(baud_rate,drivers::serial_driver::FlowControl::NONE,drivers::serial_driver::Parity::NONE,drivers::serial_driver::StopBits::ONE);
                 serial_driver->init_port(device_name, serial_config);
 
                 previous_time=this->get_clock()->now();

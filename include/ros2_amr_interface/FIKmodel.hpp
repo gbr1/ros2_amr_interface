@@ -189,16 +189,16 @@ class FIKmodel{
         */
 
         void forward_skid(){
-            joints[0]=0.0;
-            joints[1]=0.0;
-            joints[2]=0.0;
-            joints[3]=0.0;
+            joints[0]=(vx-ly*w)/wheel_radius;
+            joints[1]=(vx+ly*w)/wheel_radius;
+            joints[2]=(vx-ly*w)/wheel_radius;
+            joints[3]=(vx+ly*w)/wheel_radius;
         }
 
         void inverse_skid(){
-            vx=0.0;
-            vy=0.0;
-            w=0.0;
+            vx=wheel_radius*(joints[0]+joints[1]+joints[2]+joints[3])/4.0;
+            vy=0.0; //no drift case
+            w=wheel_radius*(-joints[0]+joints[1]-joints[2]+joints[3])/(4.0*ly);
         }
     
     
@@ -212,7 +212,7 @@ class FIKmodel{
         //------------------------------------------------------------------------------------//
     
         void setDimensions(const float ly, const float r){
-            this->lx=0.0; //unused for differential
+            this->lx=0.0; //unused for differential and skid if you don't want to take care about drifting
             this->ly=ly;
             this->wheel_radius=r;
         }
