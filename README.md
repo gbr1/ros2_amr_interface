@@ -61,7 +61,7 @@ You can learn more about node's parameters [here](./docs/parameters.md).
 
 ## Topics
 
-Check this [documentation](.docs/topics.md) about pub/sub topics.
+Check this [documentation](./docs/topics.md) about pub/sub topics.
 
 ## Examples
 

@@ -2,11 +2,11 @@
 
 Here is provided a guide on how to write your own firmware using Arduino language.
 
-You need to include ucPack library to our sketch, then to declare an ucPack class. This object will be help you to manage communication to ROS2.
+You need to include [ucPack library](https://github.com/gbr1/ucPack) to our sketch, then to declare an ucPack class. This object will be help you to manage communication to ROS2.
 
 We need some timers and variables.
 
-``` arduino
+``` c++
 #include "ucPack.h"
 
 ucPack packeter(100);
@@ -30,7 +30,7 @@ float timeout = 0.0;
 
 In `setup` function, you must start serial communcation and initialize your hardware. Don't forget to save `millis()` in each timer.
 
-```arduino
+``` c++
 void setup(){
     Serial.begin(115200);
 
@@ -48,7 +48,7 @@ The `loop` function is the core of your firmware. Using the timers we create a p
 The simple idea is to check if any serial data is available and push them into the circular buffer of ucPack.
 We need to check if any `payload`, or more simply understandable data, is available. <br>
 Using the code you will be able to understand the type of the message and choose the correct operation (e.g. update motors reference).
-``` arduino
+``` c++
 void loop(){
 
     // update motors speed 
