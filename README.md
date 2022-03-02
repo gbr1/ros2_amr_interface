@@ -2,26 +2,22 @@
 
 Lightweight package to get AMRs working with ROS2.
 
-
-
-## Run node
-
-`ros2 run ros2_amr_interface amr_interface_node`
-
-if you need to change serial port and remap a topic:<br>
-`ros2 run ros2_amr_interface amr_interface_node --ros-args -p port_name:=<your port> --remap /amr/cmd_vel:=/cmd_vel`
-
-
-## Run teleop
-
-`ros2 launch teleop_twist_joy teleop-launch.py config_filepath:=</your/full/path/to>/dev_ws/src/ros2_amr_interface/config/joy.config.yaml`
-
 ## Launch file
 
 `ros2 launch ros2_amr_interface minimal_launch.py`
 
-## How install
+## Nodes
 
+- [amr_interface_node](.docs/nodes.md)
+
+<br>
+<br>
+
+---
+
+
+
+## How install
 
 ### 1. Prerequisites
 
@@ -54,15 +50,24 @@ source install/setup.bash
 
 **NOTE:** add install/setup.bash to your .bashrc to be faster in using terminal tabs
 
+<br>
+<br>
+
+---
+
 ## Parameters
 
 You can learn more about node's parameters [here](./docs/parameters.md).
+
+## Topics
+
+Check this [documentation](.docs/topics.md) about pub/sub topics.
 
 ## Examples
 
 If you need to use `ros2_amr_interface` with your own hardware, you can check this [guide](./docs/arduino_example.md) on how to use with arduino.
 <br>
-There are also some config files for rviz and joypads.
+There are also some config files for rviz and joypads, here an example of [how to start a joypad](./docs/joypad.md).
 
 ---
 

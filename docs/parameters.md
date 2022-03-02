@@ -15,10 +15,12 @@ or<br>
 - `timeout_connection` [ 60.0 ], _float_, how many seconds of no communication are required to declare timeout<br>
 - `try_reconnect` [ true ],  _bool_, force reconnection after timeout<br>
 - `show_extra_verbose` [ false ], _bool_, show extra verbose in terminal<br>
+- `publishBattery` [true], _bool_, enable or disable Battery message<br>
 
 
 ### IMU
 
+- `publishIMU` [true], _bool_, enable or disable IMU <br>
 - `imu.frame_id` [ imu_link ], _std::string_, frame id used for imu<br>
 - `imu.offset.accelerometer.x/y/z` [ 0.0 ], _float_, offset of accelerometer measuraments on x, y and z axis<br>
 - `imu.offset.gyro.x/y/z` [0.0], _float_, offset of gyroscope measuraments on x,y and z axis<br>
@@ -43,6 +45,13 @@ or<br>
         - `model.size.chassis.wheel_separation` [ 0.0825 ], _float_, distance between left wheels and right wheels
         - `model.size.wheel.radius` [ 0.04 ], _float_, wheel radius
 
+## Dynamic parameters
+- `show_extra_verbose`
+- `publish_TF`
+- `imu.offset.accelerometer.x/y/z`
+- `imu.offset.gyro.x/y/z`
+- `imu.scale.accelerometer`
+- `imu.scale.gyro`
 
 ---
 
