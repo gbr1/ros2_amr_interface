@@ -63,6 +63,8 @@ Check this [documentation](./docs/topics.md) about pub/sub topics.
 If you need to use `ros2_amr_interface` with your own hardware, you can check this [guide](./docs/arduino_example.md) on how to use with arduino.
 <br>
 There are also some config files for rviz and joypads, here an example of [how to start a joypad](./docs/joypad.md).
+<br>
+This [guide](./docs/launch.md) helps you to understand how change your launch file parameters.
 
 ---
 

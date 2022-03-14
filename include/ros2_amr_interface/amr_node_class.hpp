@@ -577,7 +577,7 @@ class AMR_Node: public rclcpp::Node{
                 this->get_parameter("model.size.chassis.wheel_separation",model_ly);
                 this->get_parameter("model.size.wheel.radius",model_wheel);
                 fik_model.setDimensions(model_ly, model_wheel);
-            }else
+            } else
 
             if (model.compare("skid")==0){
                 this->declare_parameter<float>("model.size.chassis.wheel_separation",0.0825);
