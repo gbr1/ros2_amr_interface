@@ -2,34 +2,26 @@
 
 Lightweight package to get AMRs working with ROS2.
 
-
-
-## Run node
-
-`ros2 run ros2_amr_interface amr_interface_node`
-
-if you need to change serial port:<br>
-`ros2 run ros2_amr_interface amr_interface_node --ros-args -p port_name:=<your port>`
-
-
-## Run teleop
-
-`ros2 launch teleop_twist_joy teleop-launch.py config_filepath:=~/dev_ws/src/ros2_amr_interface/config/joy.config.yaml`
-
 ## Launch file
+
 `ros2 launch ros2_amr_interface minimal_launch.py`
+
+## Nodes
+
+- [amr_interface_node](./docs/nodes.md)
+
+---
 
 ## How install
 
-
-### Prerequisites
+### 1. Prerequisites
 
 - [ROS2](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html)
 - [colcon](https://docs.ros.org/en/foxy/Tutorials/Colcon-Tutorial.html)
 - [workspace](https://docs.ros.org/en/foxy/Tutorials/Workspace/Creating-A-Workspace.html)
 - [permissions on dialout](https://github.com/gbr1/TIL/blob/main/Linux/22-01-24_How_add_user_to_dialout_group.md)
 
-### Install AMR interface package
+### 2. Install AMR interface package
 
 You require to install dependencies, since binaries sometimes are not updated install transport_drivers from source:
 ``` bash
@@ -53,58 +45,28 @@ source install/setup.bash
 
 **NOTE:** add install/setup.bash to your .bashrc to be faster in using terminal tabs
 
+<br>
+<br>
+
 ---
 
 ## Parameters
 
-### Serial communication
+You can learn more about node's parameters [here](./docs/parameters.md).
 
-`port_name`, _std::string_, port name<br>
-`timeout_connection`, _float_, how many seconds of no communication are required to declare timeout<br>
-`try_reconnect`,  _bool_, force reconnection after timeout<br>
-`show_extra_verbose`, _bool_, show extra verbose in terminal<br>
+## Topics
 
-### IMU
+Check this [documentation](./docs/topics.md) about pub/sub topics.
 
-`imu.frame_id`, _std::string_, frame id used for imu<br>
-`imu.offset.accelerometer.x/y/z`, _float_, offset on accelerometer<br>
-`imu.offset.gyro.x/y/z`, _float_, offset on gyroscope<br>
-`imu.scale.accelerometer`, _float_, range of m/s^2<br>
-`imu.scale.gyro`, _float_, range of rad/s<br>
+## Examples
 
-### Model
-`publishTF`, _bool_, broadcast the transformation for odometry<br>
-`frame_id`, _std::string_, robot frame id<br>
-`odom.frame_id`, _std::string_, frame id for odometry<br>
+If you need to use `ros2_amr_interface` with your own hardware, you can check this [guide](./docs/arduino_example.md) on how to use with arduino.
 <br>
-`model.type`, _std::string_, default: "mecanum", options: "mecanum", "differential"<br>
-- for mecanum:<br>
-    - `model.size.chassis.x`, _float_, lx on mecanum model
-    - `model.size.chassis.y`, _float_, ly on mecanum model
-    - `model.size.wheel.radius`, _float_, wheel radius on mecanum model<br>
-- for differential:<br>
-    - `model.size.chassis.wheel_separation`, _float_, distance between two wheels
-    - `model.size.wheel.radius`, _float_, wheel radius on differential model
-
+There are also some config files for rviz and joypads, here an example of [how to start a joypad](./docs/joypad.md).
+<br>
+This [guide](./docs/launch.md) helps you to understand how change your launch file parameters.
 
 ---
-
-## ToDos
-- [x] add odom
-- [x] add tf
-- [x] add cmd_vel
-- [x] add odom reset/init pos
-- [x] add imu
-- [x] add battery
-- [x] add parameters (device name, robot dimensions, etc)
-- [x] tf broadcaster should be disabled to not cause issues with localization 
-- [x] add launch file as example
-- [x] create a namespace for topics (e.g. /amr/cmd_vel)
-- [x] add timeout
-- [x] add diff drive mode
-- [ ] refactor code in files
-- [ ] add Lifecycle
-
 
 
 > ***Copyright (c) 2022 G. Bruno under MIT license***

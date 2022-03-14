@@ -61,6 +61,8 @@ class AMR_Node: public rclcpp::Node{
         float dtheta, dx, dy;
         float battery;
         bool publishTF;
+        bool publishImu;
+        bool publishBattery;
         float timeout_connection;
         bool connected;
         bool try_reconnect;
@@ -77,6 +79,7 @@ class AMR_Node: public rclcpp::Node{
         // Required for serial communication
         std::unique_ptr<IoContext> node_ctx{};
         std::string device_name;
+        int baud_rate;
         std::unique_ptr<drivers::serial_driver::SerialPortConfig> device_config;
         std::unique_ptr<drivers::serial_driver::SerialDriver> serial_driver{};
 
@@ -205,7 +208,7 @@ class AMR_Node: public rclcpp::Node{
                     } else
                     
                     // imu message from hardware
-                    if (c=='i'){
+                    if ((c=='i')&&publishImu){
                         float temp, f;
                         packeter.unpacketC8F(c,ax,ay,az,gx,gy,gz,temp,f);
                         //-----------------------------------------------------------------------------------------
@@ -217,7 +220,7 @@ class AMR_Node: public rclcpp::Node{
                     } else
                 
                     // battery message from hardware
-                    if (c=='b'){
+                    if ((c=='b')&&publishBattery){
                         packeter.unpacketC1F(c,battery);
                         //-----------------------------------------------------------------------------------------
                         if (extra_verbose){
@@ -244,7 +247,7 @@ class AMR_Node: public rclcpp::Node{
                         }
                     } else
 
-                    if (c=='g'){
+                    if ((c=='g')&&publishImu){
                         float a,g;
                         packeter.unpacketC2F(c,a,g);
                         if (a<=0){
@@ -407,7 +410,8 @@ class AMR_Node: public rclcpp::Node{
                     return result;
                 }
 
-                if (param.get_name() == "imu.offsets.accelerometer.x"){
+
+                if (publishImu&&(param.get_name() == "imu.offsets.accelerometer.x")){
                     rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
                     if (param.get_type() != correctType){
                         result.successful = false;
@@ -421,7 +425,7 @@ class AMR_Node: public rclcpp::Node{
                     return result;
                 } 
 
-                if (param.get_name() == "imu.offsets.accelerometer.y"){
+                if (publishImu&&(param.get_name() == "imu.offsets.accelerometer.y")){
                     rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
                     if (param.get_type() != correctType){
                         result.successful = false;
@@ -435,7 +439,7 @@ class AMR_Node: public rclcpp::Node{
                     return result;
                 }
 
-                if (param.get_name() == "imu.offsets.accelerometer.z"){
+                if (publishImu&&(param.get_name() == "imu.offsets.accelerometer.z")){
                     rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
                     if (param.get_type() != correctType){
                         result.successful = false;
@@ -449,7 +453,7 @@ class AMR_Node: public rclcpp::Node{
                     return result;
                 }
 
-                if (param.get_name() == "imu.offsets.gyro.x"){
+                if (publishImu&&(param.get_name() == "imu.offsets.gyro.x")){
                     rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
                     if (param.get_type() != correctType){
                         result.successful = false;
@@ -463,7 +467,7 @@ class AMR_Node: public rclcpp::Node{
                     return result;
                 }
 
-                if (param.get_name() == "imu.offsets.gyro.y"){
+                if (publishImu&&(param.get_name() == "imu.offsets.gyro.y")){
                     rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
                     if (param.get_type() != correctType){
                         result.successful = false;
@@ -477,7 +481,7 @@ class AMR_Node: public rclcpp::Node{
                     return result;
                 }
 
-                if (param.get_name() == "imu.offsets.gyro.z"){
+                if (publishImu&&(param.get_name() == "imu.offsets.gyro.z")){
                     rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
                     if (param.get_type() != correctType){
                         result.successful = false;
@@ -517,47 +521,31 @@ class AMR_Node: public rclcpp::Node{
         // Here are declared all parameters
         void parameters_declaration(){
             this->declare_parameter<std::string>("port_name","/dev/ttyUSB0");
+            this->declare_parameter<int>("baud_rate",115200);
             this->declare_parameter<float>("timeout_connection",60.0);
             this->declare_parameter<bool>("try_reconnect",true);
             this->declare_parameter<bool>("publishTF",true);
 
-            this->declare_parameter<std::string>("imu.frame_id","imu_link");
-            this->declare_parameter<double>("imu.offsets.accelerometer.x",0.0);
-            this->declare_parameter<double>("imu.offsets.accelerometer.y",0.0);
-            this->declare_parameter<double>("imu.offsets.accelerometer.z",0.0);
-            this->declare_parameter<double>("imu.offsets.gyro.x",0.0);
-            this->declare_parameter<double>("imu.offsets.gyro.y",0.0);
-            this->declare_parameter<double>("imu.offsets.gyro.z",0.0);
-            this->declare_parameter<float>("imu.scale.accelerometer",2.0);
-            this->declare_parameter<float>("imu.scale.gyro",250.0);
-
-
+        
             this->declare_parameter<std::string>("odom.frame_id","odom");
             this->declare_parameter<std::string>("frame_id","base_link");
 
+            this->declare_parameter<bool>("publishBattery",true);
             this->declare_parameter<bool>("show_extra_verbose", false);
         }
 
         // Load static parameters
         void get_all_parameters(){
             this->get_parameter("port_name",device_name);
+            this->get_parameter("baud_rate",baud_rate);
             this->get_parameter("timeout_connection",timeout_connection);
             this->get_parameter("try_reconnect",try_reconnect);
             this->get_parameter("publishTF",publishTF);
 
-            this->get_parameter("imu.frame_id",imu_link);
-            this->get_parameter("imu.offsets.accelerometer.x",imu_offset_acc_x);
-            this->get_parameter("imu.offsets.accelerometer.y",imu_offset_acc_y);
-            this->get_parameter("imu.offsets.accelerometer.z",imu_offset_acc_z);
-            this->get_parameter("imu.offsets.gyro.x",imu_offset_gyro_x);
-            this->get_parameter("imu.offsets.gyro.y",imu_offset_gyro_y);
-            this->get_parameter("imu.offsets.gyro.z",imu_offset_gyro_z);
-            this->get_parameter("imu.scale.accelerometer",acc_scale);
-            this->get_parameter("imu.scale.gyro",gyro_scale);
-
             this->get_parameter("odom.frame_id",odom_link);
             this->get_parameter("frame_id",robot_link);   
 
+            this->get_parameter("publishBattery", publishBattery);
             this->get_parameter("show_extra_verbose", extra_verbose);    
 
         }
@@ -582,15 +570,23 @@ class AMR_Node: public rclcpp::Node{
             } else
 
             if (model.compare("differential")==0){
-                this->declare_parameter<float>("model.size.chassis.wheel_separation",0.16);
-                this->declare_parameter<float>("model.size.wheel.radius",0.03);
+                this->declare_parameter<float>("model.size.chassis.wheel_separation",0.15);
+                this->declare_parameter<float>("model.size.wheel.radius",0.0325);
 
                 fik_model.setModel(FIKmodel::model::DIFFERENTIAL);
                 this->get_parameter("model.size.chassis.wheel_separation",model_ly);
                 this->get_parameter("model.size.wheel.radius",model_wheel);
                 fik_model.setDimensions(model_ly, model_wheel);
+            } else
 
+            if (model.compare("skid")==0){
+                this->declare_parameter<float>("model.size.chassis.wheel_separation",0.0825);
+                this->declare_parameter<float>("model.size.wheel.radius",0.105);
 
+                fik_model.setModel(FIKmodel::model::SKID);
+                this->get_parameter("model.size.chassis.wheel_separation",model_ly);
+                this->get_parameter("model.size.wheel.radius",model_wheel);
+                fik_model.setDimensions(model_ly, model_wheel);
             } else {
                 RCLCPP_ERROR(this->get_logger(),"wrong paramenter on model.type, it can't be %s", model.c_str());
                 this->~AMR_Node();
@@ -599,6 +595,33 @@ class AMR_Node: public rclcpp::Node{
                        
         }
 
+        // IMU parameters
+        void imu_parameters(){
+            this->declare_parameter<bool>("publishIMU",true);
+            this->get_parameter("publishIMU", publishImu);
+
+            if (publishImu){
+                this->declare_parameter<std::string>("imu.frame_id","imu_link");
+                this->declare_parameter<double>("imu.offsets.accelerometer.x",0.0);
+                this->declare_parameter<double>("imu.offsets.accelerometer.y",0.0);
+                this->declare_parameter<double>("imu.offsets.accelerometer.z",0.0);
+                this->declare_parameter<double>("imu.offsets.gyro.x",0.0);
+                this->declare_parameter<double>("imu.offsets.gyro.y",0.0);
+                this->declare_parameter<double>("imu.offsets.gyro.z",0.0);
+                this->declare_parameter<float>("imu.scale.accelerometer",2.0);
+                this->declare_parameter<float>("imu.scale.gyro",250.0);
+            
+                this->get_parameter("imu.frame_id",imu_link);
+                this->get_parameter("imu.offsets.accelerometer.x",imu_offset_acc_x);
+                this->get_parameter("imu.offsets.accelerometer.y",imu_offset_acc_y);
+                this->get_parameter("imu.offsets.accelerometer.z",imu_offset_acc_z);
+                this->get_parameter("imu.offsets.gyro.x",imu_offset_gyro_x);
+                this->get_parameter("imu.offsets.gyro.y",imu_offset_gyro_y);
+                this->get_parameter("imu.offsets.gyro.z",imu_offset_gyro_z);
+                this->get_parameter("imu.scale.accelerometer",acc_scale);
+                this->get_parameter("imu.scale.gyro",gyro_scale);
+            }
+        }
 
         void setImuScales(const float acc, const float gyro){
             std::vector<uint8_t> serial_msg;
@@ -639,12 +662,13 @@ class AMR_Node: public rclcpp::Node{
             parameters_declaration();
             get_all_parameters();
             model_parameters();
+            imu_parameters();
             parameters_callback_handle = add_on_set_parameters_callback(std::bind(&AMR_Node::parameters_callback, this, std::placeholders::_1));
             
 
 
             try{
-                drivers::serial_driver::SerialPortConfig serial_config(115200,drivers::serial_driver::FlowControl::NONE,drivers::serial_driver::Parity::NONE,drivers::serial_driver::StopBits::ONE);
+                drivers::serial_driver::SerialPortConfig serial_config(baud_rate,drivers::serial_driver::FlowControl::NONE,drivers::serial_driver::Parity::NONE,drivers::serial_driver::StopBits::ONE);
                 serial_driver->init_port(device_name, serial_config);
 
                 previous_time=this->get_clock()->now();
@@ -666,12 +690,16 @@ class AMR_Node: public rclcpp::Node{
                 
                 odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/amr/odometry",1);
                 odom_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::odom_pub_callback, this));
+                
+                if (publishImu){
+                    imu_publisher = this->create_publisher<sensor_msgs::msg::Imu>("/amr/imu/raw",1);
+                    imu_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::imu_pub_callback, this));
+                }
 
-                imu_publisher = this->create_publisher<sensor_msgs::msg::Imu>("/amr/imu/raw",1);
-                imu_timer = this->create_wall_timer(10ms, std::bind(&AMR_Node::imu_pub_callback, this));
-
-                battery_publisher = this->create_publisher<sensor_msgs::msg::BatteryState>("/amr/battery",1);
-                battery_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::battery_pub_callback, this));
+                if (publishBattery){
+                    battery_publisher = this->create_publisher<sensor_msgs::msg::BatteryState>("/amr/battery",1);
+                    battery_timer = this->create_wall_timer(1000ms, std::bind(&AMR_Node::battery_pub_callback, this));
+                }
 
                 if (serial_driver->port()->is_open()){
                     serial_driver->port()->async_receive(std::bind(&AMR_Node::serial_callback, this, std::placeholders::_1, std::placeholders::_2));
