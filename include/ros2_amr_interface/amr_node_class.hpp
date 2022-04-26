@@ -59,7 +59,7 @@ class AMR_Node: public rclcpp::Node{
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
         float dtheta, dx, dy;
-        float battery, battery_max_voltage, battery_percentage;
+        float battery, battery_max_voltage, battery_min_voltage, battery_percentage;
         bool publishTF;
         bool publishImu;
         bool publishBattery;
@@ -352,9 +352,12 @@ class AMR_Node: public rclcpp::Node{
         // Battery publisher
         void battery_pub_callback(){
             if (battery_data_available){
-                battery_percentage=100.0*battery/battery_max_voltage;
+                battery_percentage=100.0*((battery-battery_min_voltage)/(battery_max_voltage-battery_min_voltage));
                 if (battery_percentage>100.0){
                     battery_percentage=100.0;
+                }
+                if (battery_percentage<0.0){
+                    battery_percentage=0.0;
                 }
                 rclcpp::Time now = this->get_clock()->now();
                 sensor_msgs::msg::BatteryState battery_msg;
@@ -536,6 +539,8 @@ class AMR_Node: public rclcpp::Node{
 
             this->declare_parameter<bool>("publishBattery",true);
             this->declare_parameter<float>("battery_max_voltage",12.5);
+            this->declare_parameter<float>("battery_min_voltage",10.0);
+
 
             this->declare_parameter<bool>("show_extra_verbose", false);
         }
@@ -553,6 +558,8 @@ class AMR_Node: public rclcpp::Node{
 
             this->get_parameter("publishBattery", publishBattery);
             this->get_parameter("battery_max_voltage", battery_max_voltage);
+            this->get_parameter("battery_min_voltage", battery_min_voltage);
+
 
             this->get_parameter("show_extra_verbose", extra_verbose);    
 

@@ -48,6 +48,8 @@ or<br>
 
 - `publishBattery` [true], _bool_, enable or disable Battery message<br>
 - `battery_max_voltage` [12.5], _float_, maximum voltage of the used battery<br>
+- `battery_min_voltage` [10.0], _float_, minimum voltage of the used battery<br>
+
 
 ## Dynamic parameters
 - `show_extra_verbose`
