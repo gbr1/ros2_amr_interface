@@ -12,10 +12,9 @@ or<br>
 
 - `port_name` [ /dev/ttyUSB0 ], _std::string_, port name<br>
 - `baud_rate` [ 115200 ], _int_, baud rate<br>
-- `timeout_connection` [ 60.0 ], _float_, how many seconds of no communication are required to declare timeout<br>
+- `timeout_connection` [ 60.0 ], _float_, how many seconds of no communication are required to declare timeout, -1.0 disable the timeout<br>
 - `try_reconnect` [ true ],  _bool_, force reconnection after timeout<br>
 - `show_extra_verbose` [ false ], _bool_, show extra verbose in terminal<br>
-- `publishBattery` [true], _bool_, enable or disable Battery message<br>
 
 
 ### IMU
@@ -44,6 +43,11 @@ or<br>
     - for skid:<br>
         - `model.size.chassis.wheel_separation` [ 0.0825 ], _float_, half of the distance between left wheels and right wheelss
         - `model.size.wheel.radius` [ 0.04 ], _float_, wheel radius
+
+### Battery
+
+- `publishBattery` [true], _bool_, enable or disable Battery message<br>
+- `battery_max_voltage` [12.5], _float_, maximum voltage of the used battery<br>
 
 ## Dynamic parameters
 - `show_extra_verbose`
