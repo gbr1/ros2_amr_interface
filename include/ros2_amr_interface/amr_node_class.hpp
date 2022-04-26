@@ -59,7 +59,7 @@ class AMR_Node: public rclcpp::Node{
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
         float dtheta, dx, dy;
-        float battery;
+        float battery, battery_max_voltage, battery_percentage;
         bool publishTF;
         bool publishImu;
         bool publishBattery;
@@ -352,11 +352,16 @@ class AMR_Node: public rclcpp::Node{
         // Battery publisher
         void battery_pub_callback(){
             if (battery_data_available){
+                battery_percentage=100.0*battery/battery_max_voltage;
+                if (battery_percentage>100.0){
+                    battery_percentage=100.0;
+                }
                 rclcpp::Time now = this->get_clock()->now();
                 sensor_msgs::msg::BatteryState battery_msg;
                 battery_msg.header.stamp=now;
                 battery_msg.header.frame_id="base_link";
                 battery_msg.voltage=battery;
+                battery_msg.percentage=battery_percentage;
                 battery_publisher->publish(battery_msg);
                 battery_data_available=false;
             }
@@ -526,11 +531,12 @@ class AMR_Node: public rclcpp::Node{
             this->declare_parameter<bool>("try_reconnect",true);
             this->declare_parameter<bool>("publishTF",true);
 
-        
             this->declare_parameter<std::string>("odom.frame_id","odom");
             this->declare_parameter<std::string>("frame_id","base_link");
 
             this->declare_parameter<bool>("publishBattery",true);
+            this->declare_parameter<float>("battery_max_voltage",12.5);
+
             this->declare_parameter<bool>("show_extra_verbose", false);
         }
 
@@ -546,6 +552,8 @@ class AMR_Node: public rclcpp::Node{
             this->get_parameter("frame_id",robot_link);   
 
             this->get_parameter("publishBattery", publishBattery);
+            this->get_parameter("battery_max_voltage", battery_max_voltage);
+
             this->get_parameter("show_extra_verbose", extra_verbose);    
 
         }
@@ -647,6 +655,7 @@ class AMR_Node: public rclcpp::Node{
             dx=0.0;
             dy=0.0;
             battery=0.0;
+            battery_percentage=0.0;
 
             to_be_publish=false;
             imu_data_available=false;
