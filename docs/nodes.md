@@ -10,7 +10,10 @@ It can manage:
 - odometry
 - imu
 - battery
+<br>
 
+![amr_scheme.drawio.png](./images/amr_scheme.drawio.png)
+<br>
 <br>
 
 To run:<br>
