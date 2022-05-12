@@ -155,7 +155,7 @@ class AMR_Node: public rclcpp::Node{
             tf2::Matrix3x3 m(q);
             double roll,pitch,yaw;
             m.getRPY(roll,pitch,yaw);
-            theta=float(y);
+            theta=float(yaw);
             //---------------------------------------------------------------------------------------------
             if (extra_verbose){
                 RCLCPP_INFO(this->get_logger(), "new pose:\t\t%f %f %f\t%f %f %f", x, y, 0.0, 0.0, 0.0, theta);
