@@ -23,6 +23,8 @@ or<br>
 - `imu.frame_id` [ imu_link ], _std::string_, frame id used for imu<br>
 - `imu.offset.accelerometer.x/y/z` [ 0.0 ], _float_, offset of accelerometer measuraments on x, y and z axis<br>
 - `imu.offset.gyro.x/y/z` [0.0], _float_, offset of gyroscope measuraments on x,y and z axis<br>
+- `imu.scale_compensation.accelerometer.x/y/z` [ 1.0 ], _float_, compensation accelerometer measuraments on x, y and z axis<br>
+- `imu.scale_compensation.gyro.x/y/z` [1.0], _float_, compensation gyroscope measuraments on x,y and z axis<br>
 - `imu.scale.accelerometer` [ 2.0 ], _float_, range of m/s^2<br>
 - `imu.scale.gyro` [ 250.0 ], _float_, range of rad/s<br>
 

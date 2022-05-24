@@ -56,6 +56,7 @@ class AMR_Node: public rclcpp::Node{
         std::string model;
         float model_lx, model_ly, model_wheel;
         double imu_offset_acc_x, imu_offset_acc_y, imu_offset_acc_z, imu_offset_gyro_x, imu_offset_gyro_y, imu_offset_gyro_z, acc_scale, gyro_scale;
+        double imu_compensation_acc_x, imu_compensation_acc_y, imu_compensation_acc_z, imu_compensation_gyro_x, imu_compensation_gyro_y, imu_compensation_gyro_z;
         float vx, vy, w, x, y, theta, ax, ay, az, gx, gy, gz;
         double dt;
         float dtheta, dx, dy;
@@ -328,9 +329,9 @@ class AMR_Node: public rclcpp::Node{
                 sensor_msgs::msg::Imu imu;
                 imu.header.stamp=now;
                 imu.header.frame_id=imu_link;
-                imu.linear_acceleration.x=ax+imu_offset_acc_x;
-                imu.linear_acceleration.y=ay+imu_offset_acc_y;
-                imu.linear_acceleration.z=az+imu_offset_acc_z;
+                imu.linear_acceleration.x=imu_compensation_acc_x*(ax+imu_offset_acc_x);
+                imu.linear_acceleration.y=imu_compensation_acc_y*(ay+imu_offset_acc_y);
+                imu.linear_acceleration.z=imu_compensation_acc_z*(az+imu_offset_acc_z);
                 /*
                 tf2::Quaternion q;
                 q.setRPY(gx,gy,gz);
@@ -340,9 +341,9 @@ class AMR_Node: public rclcpp::Node{
                 imu.orientation.w=q.w();
                 */
                 imu.orientation_covariance[0]=-1;
-                imu.angular_velocity.x=gx+imu_offset_gyro_x;
-                imu.angular_velocity.y=gy+imu_offset_gyro_y;
-                imu.angular_velocity.z=gz+imu_offset_gyro_z;
+                imu.angular_velocity.x=imu_compensation_gyro_x*(gx+imu_offset_gyro_x);
+                imu.angular_velocity.y=imu_compensation_gyro_y*(gy+imu_offset_gyro_y);
+                imu.angular_velocity.z=imu_compensation_gyro_z*(gz+imu_offset_gyro_z);
                 
                 imu_publisher->publish(imu);
                 imu_data_available = false;
@@ -502,6 +503,90 @@ class AMR_Node: public rclcpp::Node{
                     result.reason="Parameter "+param.get_name()+" setted correctly!";
                     return result;
                 }
+
+                if (publishImu&&(param.get_name() == "imu.scale_compensation.accelerometer.x")){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_compensation_acc_x = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (publishImu&&(param.get_name() == "imu.scale_compensation.accelerometer.y")){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_compensation_acc_y = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (publishImu&&(param.get_name() == "imu.scale_compensation.accelerometer.z")){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_compensation_acc_z = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (publishImu&&(param.get_name() == "imu.scale_compensation.gyro.x")){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_compensation_gyro_x = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (publishImu&&(param.get_name() == "imu.scale_compensation.gyro.y")){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_compensation_gyro_y = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
+
+                if (publishImu&&(param.get_name() == "imu.scale_compensation.gyro.z")){
+                    rclcpp::ParameterType correctType = rclcpp::ParameterType::PARAMETER_DOUBLE;
+                    if (param.get_type() != correctType){
+                        result.successful = false;
+                        result.reason = param.get_name()+" setted as "+rclcpp::to_string(param.get_type())+" but declared as "+rclcpp::to_string(correctType);
+                        RCLCPP_WARN_STREAM(get_logger(),result.reason);
+                        return result;
+                    }
+                    imu_compensation_gyro_z = param.as_double();
+                    result.successful=true;
+                    result.reason="Parameter "+param.get_name()+" setted correctly!";
+                    return result;
+                }
             }
             return result;
         }
@@ -623,6 +708,12 @@ class AMR_Node: public rclcpp::Node{
                 this->declare_parameter<double>("imu.offsets.gyro.x",0.0);
                 this->declare_parameter<double>("imu.offsets.gyro.y",0.0);
                 this->declare_parameter<double>("imu.offsets.gyro.z",0.0);
+                this->declare_parameter<double>("imu.scale_compensation.accelerometer.x",1.0);
+                this->declare_parameter<double>("imu.scale_compensation.accelerometer.y",1.0);
+                this->declare_parameter<double>("imu.scale_compensation.accelerometer.z",1.0);
+                this->declare_parameter<double>("imu.scale_compensation.gyro.x",1.0);
+                this->declare_parameter<double>("imu.scale_compensation.gyro.y",1.0);
+                this->declare_parameter<double>("imu.scale_compensation.gyro.z",1.0);
                 this->declare_parameter<float>("imu.scale.accelerometer",2.0);
                 this->declare_parameter<float>("imu.scale.gyro",250.0);
             
@@ -633,6 +724,12 @@ class AMR_Node: public rclcpp::Node{
                 this->get_parameter("imu.offsets.gyro.x",imu_offset_gyro_x);
                 this->get_parameter("imu.offsets.gyro.y",imu_offset_gyro_y);
                 this->get_parameter("imu.offsets.gyro.z",imu_offset_gyro_z);
+                this->get_parameter("imu.scale_compensation.accelerometer.x",imu_compensation_acc_x);
+                this->get_parameter("imu.scale_compensation.accelerometer.y",imu_compensation_acc_y);
+                this->get_parameter("imu.scale_compensation.accelerometer.z",imu_compensation_acc_z);
+                this->get_parameter("imu.scale_compensation.gyro.x",imu_compensation_gyro_x);
+                this->get_parameter("imu.scale_compensation.gyro.y",imu_compensation_gyro_y);
+                this->get_parameter("imu.scale_compensation.gyro.z",imu_compensation_gyro_z);
                 this->get_parameter("imu.scale.accelerometer",acc_scale);
                 this->get_parameter("imu.scale.gyro",gyro_scale);
             }
