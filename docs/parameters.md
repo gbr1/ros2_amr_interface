@@ -12,8 +12,9 @@ or<br>
 
 - `port_name` [ /dev/ttyUSB0 ], _std::string_, port name<br>
 - `baud_rate` [ 115200 ], _int_, baud rate<br>
+- `disable_timeout` [ true ], _bool_, disable timeout check<br>
 - `timeout_connection` [ 60.0 ], _float_, how many seconds of no communication are required to declare timeout, -1.0 disable the timeout<br>
-- `try_reconnect` [ true ],  _bool_, force reconnection after timeout<br>
+- `try_reconnect` [ false ],  _bool_, force reconnection after timeout<br>
 - `show_extra_verbose` [ false ], _bool_, show extra verbose in terminal<br>
 
 
@@ -34,6 +35,8 @@ or<br>
 - `publishTF` [ true ], _bool_, broadcast the transformation for odometry<br>
 - `frame_id` [ base_link ], _std::string_, robot frame id<br>
 - `odom.frame_id` [ odom ], _std::string_, frame id for odometry<br>
+- `force_delta_t` [ false ], _bool_, force to use delta_t parameter for odometry integration<br>
+- `delta_t` [ 0.01 ], _double_, integration time for odometry<br> 
 - `model.type` [ mecanum ], _std::string_, options: "mecanum", "differential" and "skid"<br>
     - for mecanum:<br>
         - `model.size.chassis.x` [ 0.0825 ], _float_, lx on mecanum model (half of the wheel base)
@@ -58,6 +61,8 @@ or<br>
 - `publish_TF`
 - `imu.offset.accelerometer.x/y/z`
 - `imu.offset.gyro.x/y/z`
+- `imu.scale_compensation.accelerometer.x/y/z`
+- `imu.scale_compensation.gyro.x/y/z`
 - `imu.scale.accelerometer`
 - `imu.scale.gyro`
 
