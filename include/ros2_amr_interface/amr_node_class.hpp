@@ -146,8 +146,7 @@ class AMR_Node: public rclcpp::Node{
             */
         }
 
-        //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
-
+        // Callback every 10ms to send data via serial to update joints, this begins afert 'e' was decoded
         void send_joints_callback(){
             uint8_t dim=packeter.packetC4F('J',w_1,w_2,w_3,w_4);
             for(uint8_t i=0; i<dim; i++){
@@ -163,8 +162,6 @@ class AMR_Node: public rclcpp::Node{
             }
             //--------------------------------------------------------------------
         }
-
-        //OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
 
 
         // Callback to resend joint message until ack from hardware
